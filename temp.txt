@@ -1,0 +1,172 @@
+
+Thread: main
+App version: 1.3.1
+Device: realme RE6054, Android 14
+Locale: in_ID
+Stack trace:
+org.chromium.base.JniAndroid$UncaughtExceptionException: Native stack trace:
+#00 pc 0x000000000697197f /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#01 pc 0x0000000001b6e297 /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#02 pc 0x0000000005e901a7 /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#03 pc 0x0000000005ebbd8b /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#04 pc 0x0000000005df2227 /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#05 pc 0x0000000005cd7463 /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#06 pc 0x000000000323fbe7 /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#07 pc 0x0000000001c7102b /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#08 pc 0x0000000001c6f57f /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#09 pc 0x0000000001c70a93 /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#10 pc 0x0000000001d9f0fb /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#11 pc 0x00000000038a06a7 /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#12 pc 0x00000000037e88ff /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#13 pc 0x000000000358cd37 /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#14 pc 0x000000000358ccb3 /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#15 pc 0x0000000003a4f197 /data/app/~~aLG0YZyUBbtepBIncGYGKw==/com.google.android.webview-D7IDvqWDZDmWogu8eCq1cw==/base.apk (offset 0xdd0000)
+#16 pc 0x0000000000009e8f /system/lib64/libutils.so
+#17 pc 0x000000000000992f /system/lib64/libutils.so
+#18 pc 0x00000000000aa28f /system/lib64/libandroid_runtime.so
+
+	at org.chromium.base.JniAndroid.handleException(chromium-SystemWebViewGoogle6432.aab-stable-772713803:21)
+	at android.os.MessageQueue.nativePollOnce(Native Method)
+	at android.os.MessageQueue.next(MessageQueue.java:335)
+	at android.os.Looper.loopOnce(Looper.java:162)
+	at android.os.Looper.loop(Looper.java:294)
+	at android.app.ActivityThread.main(ActivityThread.java:8391)
+	at java.lang.reflect.Method.invoke(Native Method)
+	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:640)
+	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:995)
+Caused by: android.view.WindowManager$BadTokenException: Unable to add window -- token android.view.ViewRootImpl$W@f94a3ad is not valid; is your activity running?
+	at android.view.ViewRootImpl.setView(ViewRootImpl.java:1466)
+	at android.view.WindowManagerGlobal.addView(WindowManagerGlobal.java:467)
+	at android.view.WindowManagerImpl.addView(WindowManagerImpl.java:150)
+	at android.widget.PopupWindow.invokePopup(PopupWindow.java:1580)
+	at android.widget.PopupWindow.showAtLocation(PopupWindow.java:1346)
+	at android.widget.PopupWindow.showAtLocation(PopupWindow.java:1312)
+	at com.android.internal.widget.floatingtoolbar.LocalFloatingToolbarPopup.show(LocalFloatingToolbarPopup.java:371)
+	at com.android.internal.widget.floatingtoolbar.LocalFloatingToolbarPopup.show(LocalFloatingToolbarPopup.java:346)
+	at com.android.internal.widget.floatingtoolbar.FloatingToolbar.doShow(FloatingToolbar.java:227)
+	at com.android.internal.widget.floatingtoolbar.FloatingToolbar.show(FloatingToolbar.java:167)
+	at com.android.internal.view.FloatingActionMode$FloatingToolbarVisibilityHelper.updateToolbarVisibility(FloatingActionMode.java:392)
+	at com.android.internal.view.FloatingActionMode.repositionToolbar(FloatingActionMode.java:224)
+	at com.android.internal.view.FloatingActionMode.updateViewLocationInWindow(FloatingActionMode.java:174)
+	at com.android.internal.view.FloatingActionMode.invalidateContentRect(FloatingActionMode.java:158)
+	at com.android.internal.view.FloatingActionMode.invalidate(FloatingActionMode.java:152)
+	at com.android.internal.policy.DecorView.setHandledFloatingActionMode(DecorView.java:2096)
+	at com.android.internal.policy.DecorView.setHandledActionMode(DecorView.java:1936)
+	at com.android.internal.policy.DecorView.startActionMode(DecorView.java:917)
+	at com.android.internal.policy.DecorView.startActionModeForChild(DecorView.java:872)
+	at android.view.ViewGroup.startActionModeForChild(ViewGroup.java:1037)
+	at android.view.ViewGroup.startActionModeForChild(ViewGroup.java:1037)
+	at android.view.ViewGroup.startActionModeForChild(ViewGroup.java:1037)
+	at android.view.ViewGroup.startActionModeForChild(ViewGroup.java:1037)
+	at android.view.ViewGroup.startActionModeForChild(ViewGroup.java:1037)
+	at android.view.ViewGroup.startActionModeForChild(ViewGroup.java:1037)
+	at android.view.ViewGroup.startActionModeForChild(ViewGroup.java:1037)
+	at android.view.ViewGroup.startActionModeForChild(ViewGroup.java:1037)
+	at android.view.ViewGroup.startActionModeForChild(ViewGroup.java:1037)
+	at android.view.View.startActionMode(View.java:7875)
+	at org.chromium.content.browser.selection.SelectionPopupControllerImpl.C(chromium-SystemWebViewGoogle6432.aab-stable-772713803:92)
+	at org.chromium.content.browser.selection.SelectionPopupControllerImpl.E(chromium-SystemWebViewGoogle6432.aab-stable-772713803:698)
+	at org.chromium.content.browser.selection.SelectionPopupControllerImpl.showSelectionMenu(chromium-SystemWebViewGoogle6432.aab-stable-772713803:52)
+	... 8 more
+
+Last log:
+2026-05-08 05:45:19.043501 D Keyboard.Builder: setting size and position for 6, 54: x 360, w 72
+2026-05-08 05:45:19.043541 D Keyboard.Builder: setting size and position for 7, 55: x 432, w 72
+2026-05-08 05:45:19.043578 D Keyboard.Builder: setting size and position for 8, 56: x 504, w 72
+2026-05-08 05:45:19.043622 D Keyboard.Builder: setting size and position for 9, 57: x 576, w 72
+2026-05-08 05:45:19.043660 D Keyboard.Builder: setting size and position for 0, 48: x 648, w 72
+2026-05-08 05:45:19.043704 D Keyboard.Builder: setting size and position for @, 64: x 0, w 72
+2026-05-08 05:45:19.043754 D Keyboard.Builder: setting size and position for #, 35: x 72, w 72
+2026-05-08 05:45:19.043799 D Keyboard.Builder: setting size and position for $, 36: x 144, w 72
+2026-05-08 05:45:19.043839 D Keyboard.Builder: setting size and position for _, 95: x 216, w 72
+2026-05-08 05:45:19.043876 D Keyboard.Builder: setting size and position for &, 38: x 288, w 72
+2026-05-08 05:45:19.043916 D Keyboard.Builder: setting size and position for -, 45: x 360, w 72
+2026-05-08 05:45:19.043966 D Keyboard.Builder: setting size and position for +, 43: x 432, w 72
+2026-05-08 05:45:19.044017 D Keyboard.Builder: setting size and position for (, 40: x 504, w 72
+2026-05-08 05:45:19.044058 D Keyboard.Builder: setting size and position for ), 41: x 576, w 72
+2026-05-08 05:45:19.044095 D Keyboard.Builder: setting size and position for /, 47: x 648, w 72
+2026-05-08 05:45:19.044143 D Keyboard.Builder: setting size and position for = \ <, -11: x 0, w 108
+2026-05-08 05:45:19.044188 D Keyboard.Builder: setting size and position for *, 42: x 108, w 72
+2026-05-08 05:45:19.044232 D Keyboard.Builder: setting size and position for ", 34: x 180, w 72
+2026-05-08 05:45:19.044271 D Keyboard.Builder: setting size and position for ', 39: x 252, w 72
+2026-05-08 05:45:19.044307 D Keyboard.Builder: setting size and position for :, 58: x 324, w 72
+2026-05-08 05:45:19.044347 D Keyboard.Builder: setting size and position for ;, 59: x 396, w 72
+2026-05-08 05:45:19.044382 D Keyboard.Builder: setting size and position for !, 33: x 468, w 72
+2026-05-08 05:45:19.044422 D Keyboard.Builder: setting size and position for ?, 63: x 540, w 72
+2026-05-08 05:45:19.044459 D Keyboard.Builder: setting size and position for delete_key, -7: x 612, w 108
+2026-05-08 05:45:19.044506 D Keyboard.Builder: setting size and position for ABC, -10001: x 0, w 108
+2026-05-08 05:45:19.044544 D Keyboard.Builder: setting size and position for ,, 44: x 108, w 72
+2026-05-08 05:45:19.044586 D Keyboard.Builder: setting size and position for numpad, -205: x 180, w 72
+2026-05-08 05:45:19.044626 D Keyboard.Builder: setting size and position for space_key, 32: x 252, w 287
+2026-05-08 05:45:19.044662 D Keyboard.Builder: setting size and position for ., 46: x 540, w 72
+2026-05-08 05:45:19.044702 D Keyboard.Builder: setting size and position for done_key, 10: x 612, w 108
+2026-05-08 05:45:19.520387 D RichInputConnection: setting composing text of length 3
+2026-05-08 05:45:19.525015 I LatinIME: onUpdateSelection: oss=8, ose=8, nss=9, nse=9, cs=6, ce=9
+2026-05-08 05:45:19.625317 D InputLogic: performUpdateSuggestionStripSync()
+2026-05-08 05:45:19.631650 D InputLogic: performUpdateSuggestionStripSync() : 6 ms to finish
+2026-05-08 05:45:20.378705 I LatinIME: hideWindow
+2026-05-08 05:45:20.380885 I LatinIME: onFinishInputView
+2026-05-08 05:45:20.381710 I LatinIME: onWindowHidden
+2026-05-08 05:45:20.383689 I LatinIME: onFinishInput
+2026-05-08 05:45:22.294163 I LatinIME: onFinishInput
+2026-05-08 05:45:24.062085 I LatinIME: onFinishInput
+2026-05-08 05:45:24.893749 I LatinIME: onFinishInput
+2026-05-08 05:45:24.912571 I LatinIME: Starting input. Cursor position = 0,0
+2026-05-08 05:45:24.913107 D LatinIME: editorInfo: inputType: 0x000A0001, imeOptions: 0x10000003
+2026-05-08 05:45:24.913323 D LatinIME: All caps: false, sentence caps: false, word caps: false
+2026-05-08 05:45:24.916328 I Settings: loadSettings
+2026-05-08 05:45:24.939413 D KeyboardState: setAlphabetKeyboard: [keyboard=SYMBOLS shift=RELEASING symbol=RELEASING switch=SYMBOL] autoCapsFlags=none recapitalizeMode=null
+2026-05-08 05:45:25.768849 D RichInputConnection: committing 1 characters
+2026-05-08 05:45:25.775105 I LatinIME: onUpdateSelection: oss=0, ose=0, nss=1, nse=1, cs=-1, ce=-1
+2026-05-08 05:45:25.874881 D InputLogic: performUpdateSuggestionStripSync()
+2026-05-08 05:45:26.319657 D RichInputConnection: committing 1 characters
+2026-05-08 05:45:26.324828 I LatinIME: onUpdateSelection: oss=1, ose=1, nss=2, nse=2, cs=-1, ce=-1
+2026-05-08 05:45:26.424429 D InputLogic: performUpdateSuggestionStripSync()
+2026-05-08 05:45:27.921059 I LatinIME: onUpdateSelection: oss=2, ose=2, nss=1, nse=1, cs=-1, ce=-1
+2026-05-08 05:45:27.995954 I LatinIME: onUpdateSelection: oss=1, ose=1, nss=0, nse=2, cs=-1, ce=-1
+2026-05-08 05:45:29.177205 D RichInputConnection: setting selection from 2 to 2
+2026-05-08 05:45:29.197326 D RichInputConnection: deleting 2 characters before cursor
+2026-05-08 05:45:29.220328 I LatinIME: onUpdateSelection: oss=0, ose=2, nss=0, nse=0, cs=-1, ce=-1
+2026-05-08 05:45:31.049983 D SuggestionStripView: click toolbar key BROWSER
+2026-05-08 05:45:41.348862 D SuggestionStripView: click toolbar key SELECT_WORD
+2026-05-08 05:45:43.533970 D SuggestionStripView: click toolbar key RIGHT
+2026-05-08 05:45:44.048620 D SuggestionStripView: click toolbar key RIGHT
+2026-05-08 05:45:44.448594 D SuggestionStripView: click toolbar key RIGHT
+2026-05-08 05:45:44.781800 D SuggestionStripView: click toolbar key LEFT
+2026-05-08 05:45:48.099878 D SuggestionStripView: click toolbar key PASTE
+2026-05-08 05:45:48.983226 D SuggestionStripView: click toolbar key PASTE
+2026-05-08 05:45:55.780824 D SuggestionStripView: click toolbar key SELECT_WORD
+2026-05-08 05:45:55.980892 D SuggestionStripView: click toolbar key SELECT_WORD
+2026-05-08 05:45:56.147323 D SuggestionStripView: click toolbar key SELECT_WORD
+2026-05-08 05:45:56.300958 D SuggestionStripView: click toolbar key SELECT_WORD
+2026-05-08 05:45:56.599452 D SuggestionStripView: click toolbar key COPY
+2026-05-08 05:46:24.261597 D SuggestionStripView: click toolbar key SELECT_WORD
+2026-05-08 05:46:53.508667 D SuggestionStripView: click toolbar key PASTE
+2026-05-08 05:46:56.508449 D SuggestionStripView: click toolbar key PASTE
+2026-05-08 05:47:00.045968 I LatinIME: hideWindow
+2026-05-08 05:47:00.049499 I LatinIME: onFinishInputView
+2026-05-08 05:47:00.049815 I LatinIME: onWindowHidden
+2026-05-08 05:47:00.745137 I LatinIME: onUpdateSelection: oss=0, ose=0, nss=16, nse=16, cs=-1, ce=-1
+2026-05-08 05:47:00.758996 I LatinIME: Starting input. Cursor position = 0,0
+2026-05-08 05:47:00.759835 D LatinIME: editorInfo: inputType: 0x000A0001, imeOptions: 0x10000003
+2026-05-08 05:47:00.760439 D LatinIME: All caps: false, sentence caps: false, word caps: false
+2026-05-08 05:47:00.766776 I Settings: loadSettings
+2026-05-08 05:47:00.814253 D KeyboardState: setAlphabetKeyboard: [keyboard=UNSHIFTED shift=RELEASING symbol=RELEASING switch=ALPHA] autoCapsFlags=none recapitalizeMode=null
+2026-05-08 05:47:01.770211 I LatinIME: onUpdateSelection: oss=16, ose=16, nss=12, nse=16, cs=-1, ce=-1
+2026-05-08 05:47:03.959262 I LatinIME: onUpdateSelection: oss=12, ose=16, nss=0, nse=16, cs=-1, ce=-1
+2026-05-08 05:47:05.529722 D SuggestionStripView: click toolbar key COPY
+2026-05-08 05:47:07.407209 D SuggestionStripView: click toolbar key PASTE
+2026-05-08 05:47:07.409428 E RichInputConnection: Nest level too deep : 2
+2026-05-08 05:47:07.409837 D RichInputConnection: committing 16 characters
+2026-05-08 05:47:07.459646 I LatinIME: onUpdateSelection: oss=0, ose=16, nss=16, nse=16, cs=-1, ce=-1
+2026-05-08 05:47:07.509792 D InputLogic: performUpdateSuggestionStripSync()
+2026-05-08 05:47:08.264915 I LatinIME: onUpdateSelection: oss=16, ose=16, nss=0, nse=0, cs=-1, ce=-1
+2026-05-08 05:47:13.256705 D SuggestionStripView: click toolbar key BROWSER
+2026-05-08 05:47:15.408785 D SuggestionStripView: click toolbar key PASTE
+2026-05-08 05:47:15.989820 D SuggestionStripView: click toolbar key PASTE
+2026-05-08 05:47:16.213631 D SuggestionStripView: click toolbar key PASTE
+2026-05-08 05:47:16.439719 D SuggestionStripView: click toolbar key PASTE
+2026-05-08 05:47:16.606466 D SuggestionStripView: click toolbar key PASTE
+2026-05-08 05:47:16.773057 D SuggestionStripView: click toolbar key PASTE
+2026-05-08 05:47:16.939647 D SuggestionStripView: click toolbar key PASTE
+2026-05-08 05:47:17.089664 D SuggestionStripView: click toolbar key PASTE

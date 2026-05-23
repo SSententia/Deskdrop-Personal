@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path
+        name="gesture_data_directory"
+        path="gesture_data"/>
+    <cache-path
+        name="conversation_exports"
+        path="conversation_exports"/>
+    <cache-path
+        name="camera_temp"
+        path="camera_temp"/>
+    <cache-path
+        name="video_temp"
+        path="video_temp"/>
+</paths>
