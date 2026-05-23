@@ -873,6 +873,9 @@ public final class InputLogic {
             case KeyCode.BROWSER:
                 mLatinIME.showBrowserTool();
                 break;
+            case KeyCode.FLOATING_NOTE:
+                mLatinIME.showFloatingNoteTool();
+                break;
             case KeyCode.LANGUAGE_SWITCH:
                 handleLanguageSwitchKey();
                 break;

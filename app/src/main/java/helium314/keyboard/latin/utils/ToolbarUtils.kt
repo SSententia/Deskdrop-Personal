@@ -218,6 +218,7 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     AI_ACTIONS -> KeyCode.AI_ACTIONS
     AI_TONE -> KeyCode.AI_TONE
     BROWSER -> KeyCode.BROWSER
+    FLOATING_NOTE -> KeyCode.FLOATING_NOTE
 }
 
 fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getCustomToolbarLongpressCode(key) ?: when (key) {
@@ -254,7 +255,8 @@ enum class ToolbarKey {
     AI_CONVERSATION,
     AI_ACTIONS,
     AI_TONE,
-    BROWSER
+    BROWSER,
+    FLOATING_NOTE
 }
 
 enum class ToolbarMode {

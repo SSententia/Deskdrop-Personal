@@ -1,24 +1,61 @@
-*.iml
-.idea
-.gradle
-.kotlin
-local.properties
-.DS_Store
-Gemfile
-build
-app/build
-app/release
-app/.cxx
-app/.attach_*
-fastlane/Appfile
-tools/*.txt
-*.patch
-*.diff
-*.sh
-deskdrop-release.keystore
+```
+# Compiled and build artifacts
+*.class
+*.o
+*.obj
+*.so
+*.a
+*.dll
+*.exe
+*.out
 
-# Stray files in repo root
-/cards_*.png
-/tips_*.png
-/*.png
-/full-logcat.txt
+# Dependencies
+.gradle/
+build/
+dist/
+target/
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Compression
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
+```

@@ -2,6 +2,7 @@
 package helium314.keyboard.latin.ai
 
 import android.app.AlertDialog
+import android.content.Intent
 import android.content.SharedPreferences
 import android.text.method.TextKeyListener
 import android.view.Gravity
@@ -82,6 +83,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import helium314.keyboard.latin.LatinIME
 import helium314.keyboard.latin.R
+import helium314.keyboard.latin.ai.FloatingNoteService
 import helium314.keyboard.latin.settings.Defaults
 import helium314.keyboard.latin.settings.Settings
 import helium314.keyboard.latin.utils.DeviceProtectedUtils
@@ -3202,4 +3204,130 @@ fun showAiActionsDialog(ime: LatinIME) {
     // Disable default dialog window animation to prevent jank
     dialog.window?.setWindowAnimations(0)
     ime.setDialogEditText(commandInput)
+}
+
+// ════════════════════════════════════════════════════════════════════
+// showFloatingNoteConfigDialog — manual configuration dialog for spawning a floating note
+// ════════════════════════════════════════════════════════════════════
+
+fun showFloatingNoteConfigDialog(ime: LatinIME) {
+    val prefs = DeviceProtectedUtils.getSharedPreferences(ime)
+    val dialogContext = helium314.keyboard.latin.utils.getPlatformDialogThemeContext(ime)
+
+    // Load saved defaults
+    val savedX = prefs.getInt("floating_note_x", 100)
+    val savedY = prefs.getInt("floating_note_y", 200)
+    val savedWidth = prefs.getInt("floating_note_width", 250)
+    val savedHeight = prefs.getInt("floating_note_height", 200)
+    val savedDelay = prefs.getInt("floating_note_delay", 0)
+
+    val xInput = createImeEditText(dialogContext, ime).apply {
+        hint = "X (default: 100)"
+        setText(savedX.toString())
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+    }
+    val yInput = createImeEditText(dialogContext, ime).apply {
+        hint = "Y (default: 200)"
+        setText(savedY.toString())
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+    }
+    val widthInput = createImeEditText(dialogContext, ime).apply {
+        hint = "Width dp (default: 250)"
+        setText(savedWidth.toString())
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER
+    }
+    val heightInput = createImeEditText(dialogContext, ime).apply {
+        hint = "Height dp (default: 200)"
+        setText(savedHeight.toString())
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER
+    }
+    val delayInput = createImeEditText(dialogContext, ime).apply {
+        hint = "Delay ms (default: 0)"
+        setText(savedDelay.toString())
+        inputType = android.text.InputType.TYPE_CLASS_NUMBER
+    }
+
+    val dialogHolder = arrayOfNulls<androidx.appcompat.app.AlertDialog>(1)
+
+    val dialog = showImeComposeDialog(
+        ime = ime,
+        chromeless = true,
+        onDismiss = { ime.setDialogEditText(null) },
+        content = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Configure Floating Note", fontSize = androidx.compose.ui.unit.TextUnit.Companion.sp(18), fontWeight = FontWeight.Bold)
+
+                Text("Position X:", fontSize = androidx.compose.ui.unit.TextUnit.Companion.sp(14))
+                AndroidView(factory = { xInput }, modifier = Modifier.fillMaxWidth())
+
+                Text("Position Y:", fontSize = androidx.compose.ui.unit.TextUnit.Companion.sp(14))
+                AndroidView(factory = { yInput }, modifier = Modifier.fillMaxWidth())
+
+                Text("Width (dp):", fontSize = androidx.compose.ui.unit.TextUnit.Companion.sp(14))
+                AndroidView(factory = { widthInput }, modifier = Modifier.fillMaxWidth())
+
+                Text("Height (dp):", fontSize = androidx.compose.ui.unit.TextUnit.Companion.sp(14))
+                AndroidView(factory = { heightInput }, modifier = Modifier.fillMaxWidth())
+
+                Text("Spawn Delay (ms):", fontSize = androidx.compose.ui.unit.TextUnit.Companion.sp(14))
+                AndroidView(factory = { delayInput }, modifier = Modifier.fillMaxWidth())
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { dialogHolder[0]?.dismiss() }) {
+                        Text("Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            val x = xInput.text.toString().toIntOrNull() ?: 100
+                            val y = yInput.text.toString().toIntOrNull() ?: 200
+                            val width = widthInput.text.toString().toIntOrNull() ?: 250
+                            val height = heightInput.text.toString().toIntOrNull() ?: 200
+                            val delay = delayInput.text.toString().toIntOrNull() ?: 0
+
+                            // Save as defaults
+                            prefs.edit {
+                                putInt("floating_note_x", x)
+                                putInt("floating_note_y", y)
+                                putInt("floating_note_width", width)
+                                putInt("floating_note_height", height)
+                                putInt("floating_note_delay", delay)
+                            }
+
+                            // Spawn the note with empty text
+                            val intent = android.content.Intent(ime, FloatingNoteService::class.java).apply {
+                                putExtra("text", "")
+                                putExtra("x", x)
+                                putExtra("y", y)
+                                putExtra("width", width)
+                                putExtra("height", height)
+                                putExtra("delayMs", delay)
+                                putExtra("camouflageDurationMs", 0)
+                            }
+                            ime.startService(intent)
+                            dialogHolder[0]?.dismiss()
+                        }
+                    ) {
+                        Text("Spawn Note")
+                    }
+                }
+            }
+        }
+    )
+
+    dialogHolder[0] = dialog
+    dialog.window?.setWindowAnimations(0)
+    ime.setDialogEditText(xInput)
 }
