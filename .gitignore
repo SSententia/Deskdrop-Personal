@@ -13,12 +13,14 @@
 .gradle/
 build/
 dist/
+target/
 
 # Logs and temp files
 *.log
 *.tmp
 
 # Editors
+.vscode/
 .idea/
 *.swp
 *.swo
@@ -28,14 +30,32 @@ dist/
 .env.local
 *.env.*
 
-# Coverage reports
+# Coverage
 coverage/
 htmlcov/
 .coverage
 
-# MyPy cache
-.mypy_cache/
-
-# Pytest cache
-.pytest_cache/
+# Compression
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
