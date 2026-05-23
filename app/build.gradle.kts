@@ -127,10 +127,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    compilerOptions {
-        kotlinOptions {
-            jvmTarget.set("17")
-        }
+    kotlinOptions {
+        jvmTarget = "17"
     }
 
     // see https://github.com/HeliBorg/HeliBoard/issues/477
