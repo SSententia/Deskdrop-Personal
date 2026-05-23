@@ -165,6 +165,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.AI_ACTIONS -> R.drawable.ic_ai_actions
                     ToolbarKey.AI_TONE -> R.drawable.ic_ai_tone
                     ToolbarKey.BROWSER -> R.drawable.ic_link
+                    ToolbarKey.FLOATING_NOTE -> R.drawable.ic_plus
                 })
             }
         } }
@@ -237,6 +238,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.AI_ACTIONS -> R.drawable.ic_ai_actions
                     ToolbarKey.AI_TONE -> R.drawable.ic_ai_tone
                     ToolbarKey.BROWSER -> R.drawable.ic_link
+                    ToolbarKey.FLOATING_NOTE -> R.drawable.ic_plus
                 })
             }
         } }
@@ -309,6 +311,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.AI_ACTIONS -> R.drawable.ic_ai_actions
                     ToolbarKey.AI_TONE -> R.drawable.ic_ai_tone
                     ToolbarKey.BROWSER -> R.drawable.ic_link
+                    ToolbarKey.FLOATING_NOTE -> R.drawable.ic_plus
                 })
             }
         } }
