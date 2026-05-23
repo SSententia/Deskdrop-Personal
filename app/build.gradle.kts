@@ -118,9 +118,7 @@ android {
     }
 
     kotlinOptions {
-        compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-        }
     }
 
     // see https://github.com/HeliBorg/HeliBoard/issues/477
