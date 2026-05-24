@@ -79,10 +79,17 @@ class FloatingNoteService : Service() {
         val y = intent?.getIntExtra("y", 200) ?: 200
         val width = intent?.getIntExtra("width", 250) ?: 250
         val height = intent?.getIntExtra("height", 200) ?: 200
+        val delayMs = intent?.getIntExtra("delayMs", 0) ?: 0
         val camouflageDurationMs = intent?.getIntExtra("camouflageDurationMs", 0) ?: 0
 
         showNotification()
-        showFloatingNote(text, x, y, width, height, camouflageDurationMs)
+        if (delayMs > 0) {
+            mainHandler.postDelayed({
+                showFloatingNote(text, x, y, width, height, camouflageDurationMs)
+            }, delayMs.toLong())
+        } else {
+            showFloatingNote(text, x, y, width, height, camouflageDurationMs)
+        }
 
         return START_NOT_STICKY
     }

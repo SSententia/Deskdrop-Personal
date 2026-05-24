@@ -65,16 +65,13 @@ class FloatingNoteTool : AiTool {
         val camouflageDurationMs = args.optInt("camouflageDurationMs", args.optInt("camouflage_duration_ms", 0))
 
         return try {
-            if (delayMs > 0) {
-                Thread.sleep(delayMs.toLong())
-            }
-
             val intent = Intent(ctx.appContext, FloatingNoteService::class.java).apply {
                 putExtra("text", text)
                 putExtra("x", x)
                 putExtra("y", y)
                 putExtra("width", width)
                 putExtra("height", height)
+                putExtra("delayMs", delayMs)
                 putExtra("camouflageDurationMs", camouflageDurationMs)
             }
             ctx.appContext.startService(intent)

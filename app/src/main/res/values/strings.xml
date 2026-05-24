@@ -478,6 +478,7 @@
     <string name="ai_actions" tools:keep="@string/ai_actions">AI Actions</string>
     <string name="ai_tone" tools:keep="@string/ai_tone">AI Tone</string>
     <string name="browser" tools:keep="@string/browser">Browser</string>
+    <string name="floating_note" tools:keep="@string/floating_note">Floating Note</string>
     <string name="browser_url_hint">Enter URL</string>
     <string name="browser_back">Back</string>
     <string name="browser_forward">Forward</string>

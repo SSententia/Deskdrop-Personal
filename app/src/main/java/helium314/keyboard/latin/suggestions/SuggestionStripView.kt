@@ -177,7 +177,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
                 val button = createToolbarKey(context, key)
                 button.layoutParams = toolbarKeyLayoutParams
                 setupKey(button, colors)
-                if (key in listOf(ToolbarKey.AI_ASSIST, ToolbarKey.AI_CLIPBOARD, ToolbarKey.AI_SLOT_1, ToolbarKey.AI_SLOT_2, ToolbarKey.AI_SLOT_3, ToolbarKey.AI_SLOT_4, ToolbarKey.AI_VOICE, ToolbarKey.AI_CONVERSATION, ToolbarKey.AI_ACTIONS, ToolbarKey.AI_TONE)) {
+                if (key in listOf(ToolbarKey.AI_ASSIST, ToolbarKey.AI_CLIPBOARD, ToolbarKey.AI_SLOT_1, ToolbarKey.AI_SLOT_2, ToolbarKey.AI_SLOT_3, ToolbarKey.AI_SLOT_4, ToolbarKey.AI_VOICE, ToolbarKey.AI_CONVERSATION, ToolbarKey.AI_ACTIONS, ToolbarKey.AI_TONE, ToolbarKey.BROWSER)) {
                     button.drawable?.let {
                         androidx.core.graphics.drawable.DrawableCompat.setTintList(it, null)
                         it.clearColorFilter()
@@ -194,7 +194,7 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
                 val button = createToolbarKey(context, pinnedKey)
                 button.layoutParams = toolbarKeyLayoutParams
                 setupKey(button, colors)
-                if (pinnedKey in listOf(ToolbarKey.AI_ASSIST, ToolbarKey.AI_CLIPBOARD, ToolbarKey.AI_SLOT_1, ToolbarKey.AI_SLOT_2, ToolbarKey.AI_SLOT_3, ToolbarKey.AI_SLOT_4, ToolbarKey.AI_VOICE, ToolbarKey.AI_CONVERSATION, ToolbarKey.AI_ACTIONS, ToolbarKey.AI_TONE)) {
+                if (pinnedKey in listOf(ToolbarKey.AI_ASSIST, ToolbarKey.AI_CLIPBOARD, ToolbarKey.AI_SLOT_1, ToolbarKey.AI_SLOT_2, ToolbarKey.AI_SLOT_3, ToolbarKey.AI_SLOT_4, ToolbarKey.AI_VOICE, ToolbarKey.AI_CONVERSATION, ToolbarKey.AI_ACTIONS, ToolbarKey.AI_TONE, ToolbarKey.BROWSER)) {
                     button.drawable?.let {
                         androidx.core.graphics.drawable.DrawableCompat.setTintList(it, null)
                         it.clearColorFilter()
@@ -469,6 +469,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         if (tag in listOf(ToolbarKey.AI_SLOT_1, ToolbarKey.AI_SLOT_2, ToolbarKey.AI_SLOT_3, ToolbarKey.AI_SLOT_4)) {
             val slotNumber = tag.name.last().digitToInt()
             (listener as? helium314.keyboard.latin.LatinIME)?.showSlotConfigDialog(slotNumber)
+            return
+        }
+        // Floating Note: long-press opens config dialog
+        if (tag == ToolbarKey.FLOATING_NOTE) {
+            (listener as? helium314.keyboard.latin.LatinIME)?.showFloatingNoteConfigDialog()
             return
         }
         if (!Settings.getValues().mQuickPinToolbarKeys || view.parent === pinnedKeys) {
