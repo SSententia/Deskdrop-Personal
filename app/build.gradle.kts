@@ -27,11 +27,21 @@ android {
     signingConfigs {
         create("release") {
             val props = Properties()
-            rootProject.file("local.properties").inputStream().use { props.load(it) }
-            storeFile = file(props.getProperty("RELEASE_STORE_FILE", "../deskdrop-release.keystore"))
-            storePassword = props.getProperty("RELEASE_STORE_PASSWORD", "")
-            keyAlias = props.getProperty("RELEASE_KEY_ALIAS", "deskdrop")
-            keyPassword = props.getProperty("RELEASE_KEY_PASSWORD", "")
+            val localPropsFile = rootProject.file("local.properties")
+            if (localPropsFile.exists()) {
+                localPropsFile.inputStream().use { props.load(it) }
+            } else {
+                // CI environments may not have local.properties; fall back to env vars if provided
+                val env = System.getenv()
+                env["RELEASE_STORE_FILE"]?.let { props.setProperty("RELEASE_STORE_FILE", it) }
+                env["RELEASE_STORE_PASSWORD"]?.let { props.setProperty("RELEASE_STORE_PASSWORD", it) }
+                env["RELEASE_KEY_ALIAS"]?.let { props.setProperty("RELEASE_KEY_ALIAS", it) }
+                env["RELEASE_KEY_PASSWORD"]?.let { props.setProperty("RELEASE_KEY_PASSWORD", it) }
+            }
+            storeFile = file(props.getProperty("RELEASE_STORE_FILE") ?: "../deskdrop-release.keystore")
+            storePassword = props.getProperty("RELEASE_STORE_PASSWORD") ?: ""
+            keyAlias = props.getProperty("RELEASE_KEY_ALIAS") ?: "deskdrop"
+            keyPassword = props.getProperty("RELEASE_KEY_PASSWORD") ?: ""
         }
     }
 
@@ -67,7 +77,7 @@ android {
             applicationIdSuffix = ".debug"
             signingConfig = signingConfigs.getByName("debug")
         }
-        base.archivesBaseName = "Deskdrop_" + defaultConfig.versionName
+        base.archivesName = "Deskdrop_" + defaultConfig.versionName
         // got a little too big for GitHub after some dependency upgrades, so we remove the largest dictionary
         androidComponents.onVariants { variant: ApplicationVariant ->
             if (variant.buildType == "debug") {
@@ -118,7 +128,7 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = "17"
     }
 
     // see https://github.com/HeliBorg/HeliBoard/issues/477
