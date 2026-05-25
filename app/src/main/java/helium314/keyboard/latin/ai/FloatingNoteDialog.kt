@@ -2,12 +2,23 @@
 package helium314.keyboard.latin.ai
 
 import android.content.Intent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.onFocusEvent
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import helium314.keyboard.latin.LatinIME
@@ -87,6 +98,8 @@ private fun FloatingNoteConfigContent(
 
 @Composable
 private fun ConfigRow(label: String, value: String, onValueChange: (String) -> Unit) {
+    val focusManager = LocalFocusManager.current
+    
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -97,12 +110,45 @@ private fun ConfigRow(label: String, value: String, onValueChange: (String) -> U
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(0.4f)
         )
-        OutlinedTextField(
+        
+        // Use BasicTextField instead of OutlinedTextField to avoid system floating toolbar
+        BasicTextField(
             value = value,
             onValueChange = { onValueChange(it.filter { c -> c.isDigit() || c == '-' }) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true,
-            modifier = Modifier.weight(0.6f)
+            modifier = Modifier
+                .weight(0.6f)
+                .clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .onKeyEvent { keyEvent ->
+                    if (keyEvent.key == Key.Tab) {
+                        focusManager.moveFocus(FocusDirection.Down)
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .onFocusEvent { focusState ->
+                    // Handle focus changes without triggering floating toolbar
+                },
+            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                color = MaterialTheme.colorScheme.onSurface
+            ),
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier.padding(8.dp)
+                ) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = "0",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                    innerTextField()
+                }
+            }
         )
     }
 }

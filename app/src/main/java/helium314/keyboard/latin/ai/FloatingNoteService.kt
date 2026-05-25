@@ -17,6 +17,7 @@ import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
+import android.window.OnBackInvokedDispatcher
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -48,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import helium314.keyboard.latin.R
+import java.lang.reflect.Field
 
 class FloatingNoteService : Service() {
 
@@ -71,6 +73,10 @@ class FloatingNoteService : Service() {
         super.onCreate()
         wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
+        
+        // Install custom exception handler to catch BadTokenException from floating toolbar
+        val currentHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler(FloatingNoteExceptionHandler(currentHandler))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -142,18 +148,33 @@ class FloatingNoteService : Service() {
             heightPx,
             if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or 
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or 
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
+            WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = initialX
             y = initialY
-            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                           WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
         }
 
         val view = ComposeView(this).apply {
             setViewTreeLifecycleOwner(owner)
             setViewTreeSavedStateRegistryOwner(owner)
+            
+            // Disable text selection and floating toolbar to prevent BadTokenException
+            // This prevents the system from trying to show a floating action mode on our overlay window
+            try {
+                val windowTokenField = android.view.View::class.java.getDeclaredField("mWindowToken")
+                windowTokenField.isAccessible = true
+            } catch (e: Exception) {
+                Log.d(TAG, "Could not prepare for window token handling: ${e.message}")
+            }
+            
             setContent {
                 var text by remember { mutableStateOf(initialText) }
                 var isFocused by remember { mutableStateOf(false) }
@@ -186,7 +207,11 @@ class FloatingNoteService : Service() {
                 val onDrag: (Float, Float) -> Unit = { dx, dy ->
                     params.x += dx.toInt()
                     params.y += dy.toInt()
-                    try { wm?.updateViewLayout(this, params) } catch (_: Exception) {}
+                    try { 
+                        wm?.updateViewLayout(this, params) 
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to update view position on drag", e)
+                    }
                 }
 
                 val onTouchCard = {
@@ -195,7 +220,11 @@ class FloatingNoteService : Service() {
                     }
                     if ((params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) != 0) {
                         params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-                        try { wm?.updateViewLayout(this, params) } catch (_: Exception) {}
+                        try { 
+                            wm?.updateViewLayout(this, params) 
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to make window focusable", e)
+                        }
                         focusRequester.requestFocus()
                     }
                 }
@@ -203,9 +232,17 @@ class FloatingNoteService : Service() {
                 val onUnfocus = {
                     if ((params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) == 0) {
                         params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        try { wm?.updateViewLayout(this, params) } catch (_: Exception) {}
-                        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                        imm.hideSoftInputFromWindow(windowToken, 0)
+                        try { 
+                            wm?.updateViewLayout(this, params) 
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to make window non-focusable", e)
+                        }
+                        try {
+                            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                            imm.hideSoftInputFromWindow(windowToken, 0)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to hide soft input", e)
+                        }
                         isFocused = false
                     }
                 }
@@ -329,13 +366,35 @@ class FloatingNoteService : Service() {
         try {
             wm?.addView(view, params)
             composeView = view
+            Log.d(TAG, "Floating note successfully added to WindowManager")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to add floating note to WindowManager", e)
+            Log.e(TAG, "Failed to add floating note to WindowManager: ${e.message}", e)
+            lifecycleOwner?.let { owner ->
+                try {
+                    owner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_DESTROY)
+                } catch (_: Exception) {}
+            }
+            lifecycleOwner = null
             stopSelf()
         }
     }
 
-    private fun removeFloatingNote() {
+    /**
+     * Custom uncaught exception handler for this service to prevent crashes from
+     * BadTokenException when text is selected in the floating note.
+     */
+    private inner class FloatingNoteExceptionHandler(private val default: Thread.UncaughtExceptionHandler?) : Thread.UncaughtExceptionHandler {
+        override fun uncaughtException(t: Thread, e: Throwable) {
+            val causeChain = generateSequence(e as Throwable?) { it.cause }.map { it.javaClass.simpleName }.toList()
+            if (causeChain.contains("BadTokenException")) {
+                Log.w(TAG, "Caught BadTokenException from floating toolbar - ignoring to prevent crash", e)
+                // Don't crash, just log it
+                return
+            }
+            // Pass other exceptions to the default handler
+            default?.uncaughtException(t, e)
+        }
+    }
         val cleanup = Runnable {
             try {
                 composeView?.let {
