@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.latin.ai
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -9,15 +8,18 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
+import android.view.ActionMode
 import android.view.Gravity
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
-import android.window.OnBackInvokedDispatcher
+import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -46,10 +48,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationCompat
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import helium314.keyboard.latin.R
-import java.lang.reflect.Field
 
 class FloatingNoteService : Service() {
 
@@ -60,7 +62,7 @@ class FloatingNoteService : Service() {
     }
 
     private var wm: WindowManager? = null
-    private var composeView: ComposeView? = null
+    private var composeView: android.view.View? = null
     private var lifecycleOwner: ServiceLifecycleOwner? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -71,9 +73,9 @@ class FloatingNoteService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        wm = getSystemService(WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
-        
+
         // Install custom exception handler to catch BadTokenException from floating toolbar
         val currentHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler(FloatingNoteExceptionHandler(currentHandler))
@@ -88,6 +90,23 @@ class FloatingNoteService : Service() {
         val delayMs = intent?.getIntExtra("delayMs", 0) ?: 0
         val camouflageDurationMs = intent?.getIntExtra("camouflageDurationMs", 0) ?: 0
 
+        // Check SYSTEM_ALERT_WINDOW permission before showing overlay
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Log.w(TAG, "SYSTEM_ALERT_WINDOW permission not granted - cannot show floating note")
+            try {
+                Toast.makeText(this, "Please grant 'Display over other apps' permission for floating notes", Toast.LENGTH_LONG).show()
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:${packageName}")
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to request overlay permission", e)
+            }
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         showNotification()
         if (delayMs > 0) {
             mainHandler.postDelayed({
@@ -101,7 +120,7 @@ class FloatingNoteService : Service() {
     }
 
     private fun showNotification() {
-        val notification = Notification.Builder(this, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_shortcut_chat)
             .setContentTitle("Floating Note Active")
             .setContentText("Tap to edit or close the note")
@@ -148,8 +167,8 @@ class FloatingNoteService : Service() {
             heightPx,
             if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or 
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or 
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
             WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
@@ -162,19 +181,19 @@ class FloatingNoteService : Service() {
                            WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
         }
 
+        // Wrapper FrameLayout that prevents action mode (to avoid BadTokenException).
+        // Since ComposeView is final, we wrap it in a FrameLayout that overrides startActionMode.
+        // The system trying to show a floating toolbar on our overlay window causes a BadTokenException
+        // because the overlay window is created by a Service, not an Activity.
+        val wrapper = object : android.widget.FrameLayout(this) {
+            override fun startActionMode(callback: ActionMode.Callback?): ActionMode? = null
+            override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? = null
+        }
+        // Set lifecycle owner on the wrapper (root view) so Compose can find it via view tree traversal
+        wrapper.setViewTreeLifecycleOwner(owner)
+        wrapper.setViewTreeSavedStateRegistryOwner(owner)
+
         val view = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(owner)
-            setViewTreeSavedStateRegistryOwner(owner)
-            
-            // Disable text selection and floating toolbar to prevent BadTokenException
-            // This prevents the system from trying to show a floating action mode on our overlay window
-            try {
-                val windowTokenField = android.view.View::class.java.getDeclaredField("mWindowToken")
-                windowTokenField.isAccessible = true
-            } catch (e: Exception) {
-                Log.d(TAG, "Could not prepare for window token handling: ${e.message}")
-            }
-            
             setContent {
                 var text by remember { mutableStateOf(initialText) }
                 var isFocused by remember { mutableStateOf(false) }
@@ -182,17 +201,15 @@ class FloatingNoteService : Service() {
                 val focusRequester = remember { FocusRequester() }
 
                 // Camouflage timer logic
-                LaunchedEffect(isFocused, isCamouflaged) {
+                LaunchedEffect(isFocused) {
                     if (camouflageDurationMs > 0) {
-                        if (!isFocused && !isCamouflaged) {
-                            // schedule camouflage
-                            camouflageRunnable?.let { camouflageHandler.removeCallbacks(it) }
+                        camouflageRunnable?.let { camouflageHandler.removeCallbacks(it) }
+                        if (!isFocused) {
                             val run = Runnable { isCamouflaged = true }
                             camouflageRunnable = run
                             camouflageHandler.postDelayed(run, camouflageDurationMs.toLong())
-                        } else if (isFocused) {
+                        } else {
                             isCamouflaged = false
-                            camouflageRunnable?.let { camouflageHandler.removeCallbacks(it) }
                         }
                     }
                 }
@@ -207,8 +224,8 @@ class FloatingNoteService : Service() {
                 val onDrag: (Float, Float) -> Unit = { dx, dy ->
                     params.x += dx.toInt()
                     params.y += dy.toInt()
-                    try { 
-                        wm?.updateViewLayout(this, params) 
+                    try {
+                        wm?.updateViewLayout(wrapper, params)
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed to update view position on drag", e)
                     }
@@ -220,8 +237,8 @@ class FloatingNoteService : Service() {
                     }
                     if ((params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) != 0) {
                         params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-                        try { 
-                            wm?.updateViewLayout(this, params) 
+                        try {
+                            wm?.updateViewLayout(wrapper, params)
                         } catch (e: Exception) {
                             Log.w(TAG, "Failed to make window focusable", e)
                         }
@@ -232,14 +249,14 @@ class FloatingNoteService : Service() {
                 val onUnfocus = {
                     if ((params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) == 0) {
                         params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        try { 
-                            wm?.updateViewLayout(this, params) 
+                        try {
+                            wm?.updateViewLayout(wrapper, params)
                         } catch (e: Exception) {
                             Log.w(TAG, "Failed to make window non-focusable", e)
                         }
                         try {
                             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                            imm.hideSoftInputFromWindow(windowToken, 0)
+                            imm.hideSoftInputFromWindow(wrapper.windowToken, 0)
                         } catch (e: Exception) {
                             Log.w(TAG, "Failed to hide soft input", e)
                         }
@@ -363,9 +380,14 @@ class FloatingNoteService : Service() {
             }
         }
 
+        wrapper.addView(view, android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+
         try {
-            wm?.addView(view, params)
-            composeView = view
+            wm?.addView(wrapper, params)
+            composeView = wrapper
             Log.d(TAG, "Floating note successfully added to WindowManager")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add floating note to WindowManager: ${e.message}", e)
@@ -382,19 +404,26 @@ class FloatingNoteService : Service() {
     /**
      * Custom uncaught exception handler for this service to prevent crashes from
      * BadTokenException when text is selected in the floating note.
+     * This is a safety net; the primary defense is overriding startActionMode on the ComposeView.
      */
-    private inner class FloatingNoteExceptionHandler(private val default: Thread.UncaughtExceptionHandler?) : Thread.UncaughtExceptionHandler {
+    private class FloatingNoteExceptionHandler(private val default: Thread.UncaughtExceptionHandler?) : Thread.UncaughtExceptionHandler {
         override fun uncaughtException(t: Thread, e: Throwable) {
             val causeChain = generateSequence(e as Throwable?) { it.cause }.map { it.javaClass.simpleName }.toList()
             if (causeChain.contains("BadTokenException")) {
                 Log.w(TAG, "Caught BadTokenException from floating toolbar - ignoring to prevent crash", e)
-                // Don't crash, just log it
                 return
             }
-            // Pass other exceptions to the default handler
+            // Also catch WindowManager$BadTokenException (full qualified name check)
+            val message = e.message ?: ""
+            if (message.contains("BadTokenException") || message.contains("Unable to add window")) {
+                Log.w(TAG, "Caught BadTokenException from window - ignoring to prevent crash", e)
+                return
+            }
             default?.uncaughtException(t, e)
         }
     }
+
+    private fun removeFloatingNote() {
         val cleanup = Runnable {
             try {
                 composeView?.let {
@@ -404,6 +433,11 @@ class FloatingNoteService : Service() {
                 Log.e(TAG, "Failed to remove floating note", e)
             }
             composeView = null
+            lifecycleOwner?.let { owner ->
+                try {
+                    owner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_DESTROY)
+                } catch (_: Exception) {}
+            }
             lifecycleOwner = null
             camouflageRunnable?.let { camouflageHandler.removeCallbacks(it) }
         }

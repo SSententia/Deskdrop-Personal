@@ -2,25 +2,15 @@
 package helium314.keyboard.latin.ai
 
 import android.content.Intent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import android.view.ViewGroup
+import android.widget.EditText
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.focus.onFocusEvent
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import helium314.keyboard.latin.LatinIME
 import helium314.keyboard.latin.utils.showImeComposeDialog
 
@@ -60,7 +50,7 @@ fun showFloatingNoteConfigDialog(ime: LatinIME) {
         },
         focusable = true,
         content = {
-            FloatingNoteConfigContent(
+            FloatingNoteConfigContent(ime,
                 x = x, onXChange = { x = it },
                 y = y, onYChange = { y = it },
                 width = width, onWidthChange = { width = it },
@@ -74,6 +64,7 @@ fun showFloatingNoteConfigDialog(ime: LatinIME) {
 
 @Composable
 private fun FloatingNoteConfigContent(
+    ime: LatinIME,
     x: String, onXChange: (String) -> Unit,
     y: String, onYChange: (String) -> Unit,
     width: String, onWidthChange: (String) -> Unit,
@@ -87,19 +78,23 @@ private fun FloatingNoteConfigContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        ConfigRow("X Position", x, onXChange)
-        ConfigRow("Y Position", y, onYChange)
-        ConfigRow("Width (dp)", width, onWidthChange)
-        ConfigRow("Height (dp)", height, onHeightChange)
-        ConfigRow("Spawn Delay (ms)", delayMs, onDelayMsChange)
-        ConfigRow("Camouflage (ms)", camouflageDurationMs, onCamouflageDurationMsChange)
+        ConfigRow(ime, "X Position", x, onXChange, autoFocus = true)
+        ConfigRow(ime, "Y Position", y, onYChange)
+        ConfigRow(ime, "Width (dp)", width, onWidthChange)
+        ConfigRow(ime, "Height (dp)", height, onHeightChange)
+        ConfigRow(ime, "Spawn Delay (ms)", delayMs, onDelayMsChange)
+        ConfigRow(ime, "Camouflage (ms)", camouflageDurationMs, onCamouflageDurationMsChange)
     }
 }
 
 @Composable
-private fun ConfigRow(label: String, value: String, onValueChange: (String) -> Unit) {
-    val focusManager = LocalFocusManager.current
-    
+private fun ConfigRow(
+    ime: LatinIME,
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    autoFocus: Boolean = false
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -110,45 +105,51 @@ private fun ConfigRow(label: String, value: String, onValueChange: (String) -> U
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(0.4f)
         )
-        
-        // Use BasicTextField instead of OutlinedTextField to avoid system floating toolbar
-        BasicTextField(
-            value = value,
-            onValueChange = { onValueChange(it.filter { c -> c.isDigit() || c == '-' }) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            singleLine = true,
-            modifier = Modifier
-                .weight(0.6f)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .onKeyEvent { keyEvent ->
-                    if (keyEvent.key == Key.Tab) {
-                        focusManager.moveFocus(FocusDirection.Down)
-                        true
-                    } else {
-                        false
+
+        // Use AndroidView(EditText) for proper IME keyboard input routing
+        // This enables keyboard input via LatinIME's setDialogEditText mechanism
+        AndroidView(
+            factory = { ctx ->
+                EditText(ctx).apply {
+                    setText(value)
+                    setSingleLine(true)
+                    inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+                            android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+                    setHint("0")
+                    setHintTextColor(android.graphics.Color.argb(128, 128, 128, 128))
+                    background = null // Remove underline for clean look
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                    textSize = 14f
+                    setPadding(8, 8, 8, 8)
+                    // When this EditText gets focus, tell the IME to route keyboard input here
+                    setOnFocusChangeListener { v, hasFocus ->
+                        if (hasFocus) {
+                            ime.setDialogEditText(v as EditText)
+                        }
+                    }
+                    addTextChangedListener(object : android.text.TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                            onValueChange(s?.filter { c -> c.isDigit() || c == '-' }?.toString() ?: "")
+                        }
+                        override fun afterTextChanged(s: android.text.Editable?) {}
+                    })
+                    if (autoFocus) {
+                        requestFocus()
                     }
                 }
-                .onFocusEvent { focusState ->
-                    // Handle focus changes without triggering floating toolbar
-                },
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = MaterialTheme.colorScheme.onSurface
-            ),
-            decorationBox = { innerTextField ->
-                Box(
-                    modifier = Modifier.padding(8.dp)
-                ) {
-                    if (value.isEmpty()) {
-                        Text(
-                            text = "0",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                    }
-                    innerTextField()
+            },
+            update = { editText ->
+                val filtered = value.filter { c -> c.isDigit() || c == '-' }
+                if (editText.text.toString() != filtered) {
+                    editText.setText(filtered)
+                    editText.setSelection(filtered.length)
                 }
-            }
+            },
+            modifier = Modifier.weight(0.6f)
         )
     }
 }
