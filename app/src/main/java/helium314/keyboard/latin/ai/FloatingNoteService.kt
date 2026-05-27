@@ -192,9 +192,11 @@ class FloatingNoteService : Service() {
 
         val view = ComposeView(this).apply {
             setContent {
-                // isEditing controls checkmark visibility; isCamouflaged controls alpha
-                var isEditing by remember { mutableStateOf(false) }
+                // Use MutableState directly so we can update it from the AndroidView factory
+                val isEditingState = remember { mutableStateOf(false) }
+                var isEditing by isEditingState
                 var isCamouflaged by remember { mutableStateOf(false) }
+                var editTextRef by remember { mutableStateOf<EditText?>(null) }
 
                 // Camouflage timer logic
                 LaunchedEffect(isEditing) {
@@ -233,7 +235,6 @@ class FloatingNoteService : Service() {
                         .alpha(alphaVal)
                         .shadow(8.dp, RoundedCornerShape(16.dp))
                         .clickable {
-                            // Tapping the card restores from camouflage
                             if (isCamouflaged) {
                                 isCamouflaged = false
                             }
@@ -275,18 +276,13 @@ class FloatingNoteService : Service() {
                                     modifier = Modifier
                                         .size(24.dp)
                                         .clickable {
-                                            // Hide keyboard and clear the IME bridge
-                                            try {
-                                                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                                                imm.hideSoftInputFromWindow(wrapper.windowToken, 0)
-                                            } catch (e: Exception) {
-                                                Log.w(TAG, "Failed to hide keyboard on done", e)
-                                            }
+                                            // 1. Clear internal focus
+                                            editTextRef?.clearFocus()
+                                            // 2. Disconnect IME bridge and hide keyboard
                                             val ime = LatinIME.getInstance()
-                                            if (ime != null) {
-                                                ime.setDialogEditText(null)
-                                            }
-                                            isEditing = false
+                                            ime?.setDialogEditText(null)
+                                            ime?.requestHideSelf(0)
+                                            isEditingState.value = false
                                         }
                                         .background(Color(0xFF4CAF50), CircleShape),
                                     contentAlignment = Alignment.Center
@@ -306,6 +302,9 @@ class FloatingNoteService : Service() {
                                 modifier = Modifier
                                     .size(24.dp)
                                     .clickable {
+                                        val ime = LatinIME.getInstance()
+                                        ime?.setDialogEditText(null)
+                                        ime?.requestHideSelf(0)
                                         removeFloatingNote()
                                         stopSelf()
                                     }
@@ -321,8 +320,7 @@ class FloatingNoteService : Service() {
                             }
                         }
 
-                        // Text Area — uses AndroidView(EditText) so the IME can type into it
-                        // via the LatinIME mDialogEditText bridge (FLAG_ALT_FOCUSABLE_IM enables this).
+                        // Text Area
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -332,6 +330,7 @@ class FloatingNoteService : Service() {
                             AndroidView(
                                 factory = { ctx ->
                                     EditText(ctx).apply {
+                                        editTextRef = this
                                         setText(initialText)
                                         setHint("Tap to note...")
                                         setHintTextColor(android.graphics.Color.argb(136, 255, 255, 255))
@@ -345,24 +344,31 @@ class FloatingNoteService : Service() {
                                         )
                                         setLineSpacing(0f, 1.15f)
 
-                                        // When focused, register with LatinIME so keyboard input
-                                        // routes here via the existing mDialogEditText mechanism.
+                                        // Handle internal focus changes
                                         setOnFocusChangeListener { v, hasFocus ->
-                                            isEditing = hasFocus
+                                            isEditingState.value = hasFocus
+                                            val ime = LatinIME.getInstance()
                                             if (hasFocus) {
-                                                isCamouflaged = false
-                                                val ime = LatinIME.getInstance()
-                                                if (ime != null) {
-                                                    ime.setDialogEditText(this)
-                                                    // Show the keyboard
-                                                    try {
-                                                        val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                                                        imm.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
-                                                    } catch (e: Exception) {
-                                                        Log.w(TAG, "Failed to show keyboard", e)
-                                                    }
-                                                }
+                                                ime?.setDialogEditText(this)
+                                                // FORCE the keyboard to slide up
+                                                ime?.startShowingInputView(true)
+                                            } else {
+                                                ime?.setDialogEditText(null)
+                                                ime?.requestHideSelf(0)
                                             }
+                                        }
+                                        
+                                        // Overlays sometimes swallow the first tap without triggering 
+                                        // onFocusChange, so we explicitly catch the touch event.
+                                        setOnTouchListener { view, event ->
+                                            if (event.action == android.view.MotionEvent.ACTION_UP) {
+                                                view.requestFocus()
+                                                val ime = LatinIME.getInstance()
+                                                ime?.setDialogEditText(view as EditText)
+                                                ime?.startShowingInputView(true)
+                                                isEditingState.value = true
+                                            }
+                                            false
                                         }
                                     }
                                 },
