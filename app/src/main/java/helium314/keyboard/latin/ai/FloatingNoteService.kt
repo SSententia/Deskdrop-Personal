@@ -17,8 +17,10 @@ import android.provider.Settings
 import android.util.Log
 import android.view.ActionMode
 import android.view.Gravity
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -29,7 +31,6 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
@@ -38,19 +39,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import helium314.keyboard.latin.LatinIME
 import helium314.keyboard.latin.R
 
 class FloatingNoteService : Service() {
@@ -76,7 +75,6 @@ class FloatingNoteService : Service() {
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
 
-        // Install custom exception handler to catch BadTokenException from floating toolbar
         val currentHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler(FloatingNoteExceptionHandler(currentHandler))
     }
@@ -90,7 +88,6 @@ class FloatingNoteService : Service() {
         val delayMs = intent?.getIntExtra("delayMs", 0) ?: 0
         val camouflageDurationMs = intent?.getIntExtra("camouflageDurationMs", 0) ?: 0
 
-        // Check SYSTEM_ALERT_WINDOW permission before showing overlay
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             Log.w(TAG, "SYSTEM_ALERT_WINDOW permission not granted - cannot show floating note")
             try {
@@ -162,6 +159,9 @@ class FloatingNoteService : Service() {
         owner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_RESUME)
         lifecycleOwner = owner
 
+        // Stable window flags: NOT_FOCUSABLE so overlay never steals window focus,
+        // ALT_FOCUSABLE_IM so IME can route text input to EditText views within.
+        // These flags are NEVER toggled — that was the source of Bug 1 and Bug 3.
         val params = WindowManager.LayoutParams(
             widthPx,
             heightPx,
@@ -178,33 +178,29 @@ class FloatingNoteService : Service() {
             x = initialX
             y = initialY
             softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
-                           WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN
+                           WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
         }
 
         // Wrapper FrameLayout that prevents action mode (to avoid BadTokenException).
         // Since ComposeView is final, we wrap it in a FrameLayout that overrides startActionMode.
-        // The system trying to show a floating toolbar on our overlay window causes a BadTokenException
-        // because the overlay window is created by a Service, not an Activity.
         val wrapper = object : android.widget.FrameLayout(this) {
             override fun startActionMode(callback: ActionMode.Callback?): ActionMode? = null
             override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? = null
         }
-        // Set lifecycle owner on the wrapper (root view) so Compose can find it via view tree traversal
         wrapper.setViewTreeLifecycleOwner(owner)
         wrapper.setViewTreeSavedStateRegistryOwner(owner)
 
         val view = ComposeView(this).apply {
             setContent {
-                var text by remember { mutableStateOf(initialText) }
-                var isFocused by remember { mutableStateOf(false) }
+                // isEditing controls checkmark visibility; isCamouflaged controls alpha
+                var isEditing by remember { mutableStateOf(false) }
                 var isCamouflaged by remember { mutableStateOf(false) }
-                val focusRequester = remember { FocusRequester() }
 
                 // Camouflage timer logic
-                LaunchedEffect(isFocused) {
+                LaunchedEffect(isEditing) {
                     if (camouflageDurationMs > 0) {
                         camouflageRunnable?.let { camouflageHandler.removeCallbacks(it) }
-                        if (!isFocused) {
+                        if (!isEditing) {
                             val run = Runnable { isCamouflaged = true }
                             camouflageRunnable = run
                             camouflageHandler.postDelayed(run, camouflageDurationMs.toLong())
@@ -231,45 +227,17 @@ class FloatingNoteService : Service() {
                     }
                 }
 
-                val onTouchCard = {
-                    if (isCamouflaged) {
-                        isCamouflaged = false
-                    }
-                    if ((params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) != 0) {
-                        params.flags = params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-                        try {
-                            wm?.updateViewLayout(wrapper, params)
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Failed to make window focusable", e)
-                        }
-                        focusRequester.requestFocus()
-                    }
-                }
-
-                val onUnfocus = {
-                    if ((params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) == 0) {
-                        params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        try {
-                            wm?.updateViewLayout(wrapper, params)
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Failed to make window non-focusable", e)
-                        }
-                        try {
-                            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                            imm.hideSoftInputFromWindow(wrapper.windowToken, 0)
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Failed to hide soft input", e)
-                        }
-                        isFocused = false
-                    }
-                }
-
                 Card(
                     modifier = Modifier
                         .fillMaxSize()
                         .alpha(alphaVal)
                         .shadow(8.dp, RoundedCornerShape(16.dp))
-                        .clickable { onTouchCard() },
+                        .clickable {
+                            // Tapping the card restores from camouflage
+                            if (isCamouflaged) {
+                                isCamouflaged = false
+                            }
+                        },
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = Color(0xE61E1E1E)
@@ -291,7 +259,7 @@ class FloatingNoteService : Service() {
                                 .padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Drag Handle (looks like small capsule)
+                            // Drag Handle
                             Box(
                                 modifier = Modifier
                                     .width(30.dp)
@@ -301,12 +269,25 @@ class FloatingNoteService : Service() {
 
                             Spacer(modifier = Modifier.weight(1f))
 
-                            // Save/Lock checkmark button
-                            if (isFocused) {
+                            // Done/checkmark button — shown when the EditText has focus
+                            if (isEditing) {
                                 Box(
                                     modifier = Modifier
                                         .size(24.dp)
-                                        .clickable { onUnfocus() }
+                                        .clickable {
+                                            // Hide keyboard and clear the IME bridge
+                                            try {
+                                                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                                                imm.hideSoftInputFromWindow(wrapper.windowToken, 0)
+                                            } catch (e: Exception) {
+                                                Log.w(TAG, "Failed to hide keyboard on done", e)
+                                            }
+                                            val ime = LatinIME.getInstance()
+                                            if (ime != null) {
+                                                ime.setDialogEditText(null)
+                                            }
+                                            isEditing = false
+                                        }
                                         .background(Color(0xFF4CAF50), CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -340,39 +321,52 @@ class FloatingNoteService : Service() {
                             }
                         }
 
-                        // Text Area (TextField)
+                        // Text Area — uses AndroidView(EditText) so the IME can type into it
+                        // via the LatinIME mDialogEditText bridge (FLAG_ALT_FOCUSABLE_IM enables this).
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
                                 .padding(12.dp)
                         ) {
-                            BasicTextField(
-                                value = text,
-                                onValueChange = { text = it },
-                                textStyle = TextStyle(
-                                    color = Color.White,
-                                    fontSize = 14.sp
-                                ),
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .focusRequester(focusRequester)
-                                    .onFocusChanged { state ->
-                                        isFocused = state.isFocused
-                                    },
-                                cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFF00E5FF)),
-                                decorationBox = { innerTextField ->
-                                    Box(modifier = Modifier.fillMaxSize()) {
-                                        if (text.isEmpty()) {
-                                            Text(
-                                                text = "Tap to note...",
-                                                color = Color(0x88FFFFFF),
-                                                fontSize = 14.sp
-                                            )
+                            AndroidView(
+                                factory = { ctx ->
+                                    EditText(ctx).apply {
+                                        setText(initialText)
+                                        setHint("Tap to note...")
+                                        setHintTextColor(android.graphics.Color.argb(136, 255, 255, 255))
+                                        background = null
+                                        setTextColor(android.graphics.Color.WHITE)
+                                        textSize = 16f
+                                        includeFontPadding = false
+                                        layoutParams = ViewGroup.LayoutParams(
+                                            ViewGroup.LayoutParams.MATCH_PARENT,
+                                            ViewGroup.LayoutParams.MATCH_PARENT
+                                        )
+                                        setLineSpacing(0f, 1.15f)
+
+                                        // When focused, register with LatinIME so keyboard input
+                                        // routes here via the existing mDialogEditText mechanism.
+                                        setOnFocusChangeListener { v, hasFocus ->
+                                            isEditing = hasFocus
+                                            if (hasFocus) {
+                                                isCamouflaged = false
+                                                val ime = LatinIME.getInstance()
+                                                if (ime != null) {
+                                                    ime.setDialogEditText(this)
+                                                    // Show the keyboard
+                                                    try {
+                                                        val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                                                        imm.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
+                                                    } catch (e: Exception) {
+                                                        Log.w(TAG, "Failed to show keyboard", e)
+                                                    }
+                                                }
+                                            }
                                         }
-                                        innerTextField()
                                     }
-                                }
+                                },
+                                modifier = Modifier.fillMaxSize()
                             )
                         }
                     }
@@ -380,9 +374,9 @@ class FloatingNoteService : Service() {
             }
         }
 
-        wrapper.addView(view, android.view.ViewGroup.LayoutParams(
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        wrapper.addView(view, ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
         ))
 
         try {
@@ -401,11 +395,6 @@ class FloatingNoteService : Service() {
         }
     }
 
-    /**
-     * Custom uncaught exception handler for this service to prevent crashes from
-     * BadTokenException when text is selected in the floating note.
-     * This is a safety net; the primary defense is overriding startActionMode on the ComposeView.
-     */
     private class FloatingNoteExceptionHandler(private val default: Thread.UncaughtExceptionHandler?) : Thread.UncaughtExceptionHandler {
         override fun uncaughtException(t: Thread, e: Throwable) {
             val causeChain = generateSequence(e as Throwable?) { it.cause }.map { it.javaClass.simpleName }.toList()
@@ -413,7 +402,6 @@ class FloatingNoteService : Service() {
                 Log.w(TAG, "Caught BadTokenException from floating toolbar - ignoring to prevent crash", e)
                 return
             }
-            // Also catch WindowManager$BadTokenException (full qualified name check)
             val message = e.message ?: ""
             if (message.contains("BadTokenException") || message.contains("Unable to add window")) {
                 Log.w(TAG, "Caught BadTokenException from window - ignoring to prevent crash", e)

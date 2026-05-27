@@ -60,6 +60,7 @@ import helium314.keyboard.latin.utils.getPinnedToolbarKeys
 import helium314.keyboard.latin.utils.prefs
 import helium314.keyboard.latin.utils.removeFirst
 import helium314.keyboard.latin.utils.removePinnedKey
+import helium314.keyboard.latin.ai.spawnFloatingNoteWithSavedConfig
 import helium314.keyboard.latin.utils.setToolbarButtonsActivatedStateOnPrefChange
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
@@ -401,6 +402,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
         AudioAndHapticFeedbackManager.getInstance().performHapticAndAudioFeedback(KeyCode.NOT_SPECIFIED, this, HapticEvent.KEY_PRESS)
         val tag = view.tag
         if (tag is ToolbarKey) {
+            // Floating Note: tap → spawn with saved config immediately
+            if (tag == ToolbarKey.FLOATING_NOTE) {
+                spawnFloatingNoteWithSavedConfig(context)
+                return
+            }
             val code = getCodeForToolbarKey(tag)
             if (code != KeyCode.UNSPECIFIED) {
                 Log.d(TAG, "click toolbar key $tag")

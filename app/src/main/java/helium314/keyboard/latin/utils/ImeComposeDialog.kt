@@ -152,6 +152,7 @@ fun showImeComposeDialog(
     dialog.setOnDismissListener {
         lifecycleOwner.onDestroy()
         ime.setActiveDialog(null)
+        ime.setDialogEditText(null)
         onDismiss?.invoke()
     }
 

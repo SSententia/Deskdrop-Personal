@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.latin.ai
 
+import android.content.Context
 import android.content.Intent
 import android.view.ViewGroup
 import android.widget.EditText
@@ -12,15 +13,48 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import helium314.keyboard.latin.LatinIME
+import helium314.keyboard.latin.utils.DeviceProtectedUtils
 import helium314.keyboard.latin.utils.showImeComposeDialog
 
+// --- Pref keys for floating note config persistence ---
+private const val PREF_FLOATING_NOTE_X = "floating_note_x"
+private const val PREF_FLOATING_NOTE_Y = "floating_note_y"
+private const val PREF_FLOATING_NOTE_WIDTH = "floating_note_width"
+private const val PREF_FLOATING_NOTE_HEIGHT = "floating_note_height"
+private const val PREF_FLOATING_NOTE_DELAY_MS = "floating_note_delay_ms"
+private const val PREF_FLOATING_NOTE_CAMOUFLAGE_MS = "floating_note_camouflage_ms"
+
+/** Spawn a floating note with the last-saved configuration. Callable from any Context. */
+fun spawnFloatingNoteWithSavedConfig(context: Context) {
+    val prefs = DeviceProtectedUtils.getSharedPreferences(context)
+    val x = prefs.getInt(PREF_FLOATING_NOTE_X, 100)
+    val y = prefs.getInt(PREF_FLOATING_NOTE_Y, 200)
+    val width = prefs.getInt(PREF_FLOATING_NOTE_WIDTH, 250)
+    val height = prefs.getInt(PREF_FLOATING_NOTE_HEIGHT, 200)
+    val delayMs = prefs.getInt(PREF_FLOATING_NOTE_DELAY_MS, 0)
+    val camouflageMs = prefs.getInt(PREF_FLOATING_NOTE_CAMOUFLAGE_MS, 0)
+
+    val intent = Intent(context, FloatingNoteService::class.java).apply {
+        putExtra("text", "")
+        putExtra("x", x)
+        putExtra("y", y)
+        putExtra("width", width)
+        putExtra("height", height)
+        putExtra("delayMs", delayMs)
+        putExtra("camouflageDurationMs", camouflageMs)
+    }
+    context.startService(intent)
+}
+
 fun showFloatingNoteConfigDialog(ime: LatinIME) {
-    var x by mutableStateOf("100")
-    var y by mutableStateOf("200")
-    var width by mutableStateOf("250")
-    var height by mutableStateOf("200")
-    var delayMs by mutableStateOf("0")
-    var camouflageDurationMs by mutableStateOf("0")
+    // Load persisted values on dialog open
+    val prefs = DeviceProtectedUtils.getSharedPreferences(ime)
+    var x by mutableStateOf(prefs.getInt(PREF_FLOATING_NOTE_X, 100).toString())
+    var y by mutableStateOf(prefs.getInt(PREF_FLOATING_NOTE_Y, 200).toString())
+    var width by mutableStateOf(prefs.getInt(PREF_FLOATING_NOTE_WIDTH, 250).toString())
+    var height by mutableStateOf(prefs.getInt(PREF_FLOATING_NOTE_HEIGHT, 200).toString())
+    var delayMs by mutableStateOf(prefs.getInt(PREF_FLOATING_NOTE_DELAY_MS, 0).toString())
+    var camouflageDurationMs by mutableStateOf(prefs.getInt(PREF_FLOATING_NOTE_CAMOUFLAGE_MS, 0).toString())
 
     showImeComposeDialog(
         ime = ime,
@@ -32,6 +66,16 @@ fun showFloatingNoteConfigDialog(ime: LatinIME) {
             val hVal = height.toIntOrNull() ?: 200
             val dVal = delayMs.toIntOrNull() ?: 0
             val cVal = camouflageDurationMs.toIntOrNull() ?: 0
+
+            // Save to prefs so tap-to-spawn uses these values
+            prefs.edit()
+                .putInt(PREF_FLOATING_NOTE_X, xVal)
+                .putInt(PREF_FLOATING_NOTE_Y, yVal)
+                .putInt(PREF_FLOATING_NOTE_WIDTH, wVal)
+                .putInt(PREF_FLOATING_NOTE_HEIGHT, hVal)
+                .putInt(PREF_FLOATING_NOTE_DELAY_MS, dVal)
+                .putInt(PREF_FLOATING_NOTE_CAMOUFLAGE_MS, cVal)
+                .apply()
 
             val intent = Intent(ime, FloatingNoteService::class.java).apply {
                 putExtra("text", "")
@@ -106,8 +150,6 @@ private fun ConfigRow(
             modifier = Modifier.weight(0.4f)
         )
 
-        // Use AndroidView(EditText) for proper IME keyboard input routing
-        // This enables keyboard input via LatinIME's setDialogEditText mechanism
         AndroidView(
             factory = { ctx ->
                 EditText(ctx).apply {
@@ -117,14 +159,13 @@ private fun ConfigRow(
                             android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
                     setHint("0")
                     setHintTextColor(android.graphics.Color.argb(128, 128, 128, 128))
-                    background = null // Remove underline for clean look
+                    background = null
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT
                     )
                     textSize = 14f
                     setPadding(8, 8, 8, 8)
-                    // When this EditText gets focus, tell the IME to route keyboard input here
                     setOnFocusChangeListener { v, hasFocus ->
                         if (hasFocus) {
                             ime.setDialogEditText(v as EditText)
