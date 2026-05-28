@@ -196,6 +196,7 @@ class FloatingNoteService : Service() {
                 val isEditingState = remember { mutableStateOf(false) }
                 var isEditing by isEditingState
                 var isCamouflaged by remember { mutableStateOf(false) }
+                var showCloseConfirmation by remember { mutableStateOf(false) }
                 var editTextRef by remember { mutableStateOf<EditText?>(null) }
 
                 // Camouflage timer logic
@@ -245,140 +246,217 @@ class FloatingNoteService : Service() {
                     ),
                     border = BorderStroke(1.dp, Color(0x33FFFFFF))
                 ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        // Header Bar
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFF2A2A2A))
-                                .pointerInput(Unit) {
-                                    detectDragGestures { change, dragAmount ->
-                                        change.consume()
-                                        onDrag(dragAmount.x, dragAmount.y)
-                                    }
-                                }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Drag Handle
-                            Box(
+                    Box(Modifier.fillMaxSize()) {
+                        // Main content Column
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // Header Bar
+                            Row(
                                 modifier = Modifier
-                                    .width(30.dp)
-                                    .height(4.dp)
-                                    .background(Color(0x66FFFFFF), RoundedCornerShape(2.dp))
-                            )
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF2A2A2A))
+                                    .pointerInput(Unit) {
+                                        detectDragGestures { change, dragAmount ->
+                                            change.consume()
+                                            onDrag(dragAmount.x, dragAmount.y)
+                                        }
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Drag Handle
+                                Box(
+                                    modifier = Modifier
+                                        .width(30.dp)
+                                        .height(4.dp)
+                                        .background(Color(0x66FFFFFF), RoundedCornerShape(2.dp))
+                                )
 
-                            Spacer(modifier = Modifier.weight(1f))
+                                Spacer(modifier = Modifier.weight(1f))
 
-                            // Done/checkmark button — shown when the EditText has focus
-                            if (isEditing) {
+                                // Done/checkmark button — shown when the EditText has focus
+                                if (isEditing) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .clickable {
+                                                // 1. Clear internal focus
+                                                editTextRef?.clearFocus()
+                                                // 2. Disconnect IME bridge and hide keyboard
+                                                val ime = LatinIME.getInstance()
+                                                ime?.setDialogEditText(null)
+                                                ime?.requestHideSelf(0)
+                                                isEditingState.value = false
+                                            }
+                                            .background(Color(0xFF4CAF50), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "✓",
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+
+                                // Close Button
                                 Box(
                                     modifier = Modifier
                                         .size(24.dp)
-                                        .clickable {
-                                            // 1. Clear internal focus
-                                            editTextRef?.clearFocus()
-                                            // 2. Disconnect IME bridge and hide keyboard
-                                            val ime = LatinIME.getInstance()
-                                            ime?.setDialogEditText(null)
-                                            ime?.requestHideSelf(0)
-                                            isEditingState.value = false
-                                        }
-                                        .background(Color(0xFF4CAF50), CircleShape),
+                                        .clickable { showCloseConfirmation = true }
+                                        .background(Color(0xFFE53935), CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "✓",
+                                        text = "✕",
                                         color = Color.White,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(8.dp))
                             }
 
-                            // Close Button
+                            // Text Area
                             Box(
                                 modifier = Modifier
-                                    .size(24.dp)
-                                    .clickable {
-                                        val ime = LatinIME.getInstance()
-                                        ime?.setDialogEditText(null)
-                                        ime?.requestHideSelf(0)
-                                        removeFloatingNote()
-                                        stopSelf()
-                                    }
-                                    .background(Color(0xFFE53935), CircleShape),
-                                contentAlignment = Alignment.Center
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                                    .padding(12.dp)
                             ) {
-                                Text(
-                                    text = "✕",
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
+                                AndroidView(
+                                    factory = { ctx ->
+                                        EditText(ctx).apply {
+                                            editTextRef = this
+                                            setText(initialText)
+                                            setHint("Tap to note...")
+                                            setHintTextColor(android.graphics.Color.argb(136, 255, 255, 255))
+                                            background = null
+                                            setTextColor(android.graphics.Color.WHITE)
+                                            textSize = 16f
+                                            includeFontPadding = false
+                                            layoutParams = ViewGroup.LayoutParams(
+                                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                                ViewGroup.LayoutParams.MATCH_PARENT
+                                            )
+                                            setLineSpacing(0f, 1.15f)
+
+                                            // Handle internal focus changes
+                                            setOnFocusChangeListener { v, hasFocus ->
+                                                isEditingState.value = hasFocus
+                                                val ime = LatinIME.getInstance()
+                                                if (hasFocus) {
+                                                    ime?.setDialogEditText(this)
+                                                    // FORCE the keyboard to slide up
+                                                    ime?.startShowingInputView(true)
+                                                } else {
+                                                    ime?.setDialogEditText(null)
+                                                    ime?.requestHideSelf(0)
+                                                }
+                                            }
+                                            
+                                            // Overlays sometimes swallow the first tap without triggering 
+                                            // onFocusChange, so we explicitly catch the touch event.
+                                            setOnTouchListener { view, event ->
+                                                if (event.action == android.view.MotionEvent.ACTION_UP) {
+                                                    view.requestFocus()
+                                                    val ime = LatinIME.getInstance()
+                                                    ime?.setDialogEditText(view as EditText)
+                                                    ime?.startShowingInputView(true)
+                                                    isEditingState.value = true
+                                                }
+                                                false
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize()
                                 )
                             }
-                        }
+                        } // Column closes
 
-                        // Text Area
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f)
-                                .padding(12.dp)
-                        ) {
-                            AndroidView(
-                                factory = { ctx ->
-                                    EditText(ctx).apply {
-                                        editTextRef = this
-                                        setText(initialText)
-                                        setHint("Tap to note...")
-                                        setHintTextColor(android.graphics.Color.argb(136, 255, 255, 255))
-                                        background = null
-                                        setTextColor(android.graphics.Color.WHITE)
-                                        textSize = 16f
-                                        includeFontPadding = false
-                                        layoutParams = ViewGroup.LayoutParams(
-                                            ViewGroup.LayoutParams.MATCH_PARENT,
-                                            ViewGroup.LayoutParams.MATCH_PARENT
+                        // Close Confirmation Dialog overlay (sibling of Column, drawn on top)
+                        if (showCloseConfirmation) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color(0x80000000))
+                                    .clickable { /* block clicks through to note */ },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Card(
+                                    modifier = Modifier.widthIn(min = 200.dp, max = 260.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = Color(0xFF2A2A2A)
+                                    ),
+                                    border = BorderStroke(1.dp, Color(0x33FFFFFF))
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(20.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = "Delete this note?",
+                                            color = Color.White,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold
                                         )
-                                        setLineSpacing(0f, 1.15f)
-
-                                        // Handle internal focus changes
-                                        setOnFocusChangeListener { v, hasFocus ->
-                                            isEditingState.value = hasFocus
-                                            val ime = LatinIME.getInstance()
-                                            if (hasFocus) {
-                                                ime?.setDialogEditText(this)
-                                                // FORCE the keyboard to slide up
-                                                ime?.startShowingInputView(true)
-                                            } else {
-                                                ime?.setDialogEditText(null)
-                                                ime?.requestHideSelf(0)
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = "The content will be lost.",
+                                            color = Color(0xAAFFFFFF),
+                                            fontSize = 13.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(20.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceEvenly
+                                        ) {
+                                            // Cancel button
+                                            Box(
+                                                modifier = Modifier
+                                                    .clickable { showCloseConfirmation = false }
+                                                    .background(Color(0xFF555555), RoundedCornerShape(8.dp))
+                                                    .padding(horizontal = 24.dp, vertical = 10.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "Cancel",
+                                                    color = Color.White,
+                                                    fontSize = 14.sp
+                                                )
                                             }
-                                        }
-                                        
-                                        // Overlays sometimes swallow the first tap without triggering 
-                                        // onFocusChange, so we explicitly catch the touch event.
-                                        setOnTouchListener { view, event ->
-                                            if (event.action == android.view.MotionEvent.ACTION_UP) {
-                                                view.requestFocus()
-                                                val ime = LatinIME.getInstance()
-                                                ime?.setDialogEditText(view as EditText)
-                                                ime?.startShowingInputView(true)
-                                                isEditingState.value = true
+                                            // Delete button
+                                            Box(
+                                                modifier = Modifier
+                                                    .clickable {
+                                                        showCloseConfirmation = false
+                                                        val ime = LatinIME.getInstance()
+                                                        ime?.setDialogEditText(null)
+                                                        ime?.requestHideSelf(0)
+                                                        removeFloatingNote()
+                                                        stopSelf()
+                                                    }
+                                                    .background(Color(0xFFE53935), RoundedCornerShape(8.dp))
+                                                    .padding(horizontal = 24.dp, vertical = 10.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = "Delete",
+                                                    color = Color.White,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
                                             }
-                                            false
                                         }
                                     }
-                                },
-                                modifier = Modifier.fillMaxSize()
-                            )
+                                }
+                            }
                         }
-                    }
-                }
-            }
-        }
+                    } // Box closes
+                } // Card closes
+            } // setContent closes
+        } // apply closes
 
         wrapper.addView(view, ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
