@@ -2150,6 +2150,11 @@ public class LatinIME extends InputMethodService implements
         BrowserToolKt.showBrowserTool(this);
     }
 
+    public void showCalculatorTool() {
+        AudioAndHapticFeedbackManager.getInstance().vibrate(20);
+        CalculatorToolKt.showCalculatorTool(this);
+    }
+
     public void showFloatingNoteConfigDialog() {
         AudioAndHapticFeedbackManager.getInstance().vibrate(20);
         helium314.keyboard.latin.ai.FloatingNoteDialogKt.showFloatingNoteConfigDialog(this);
