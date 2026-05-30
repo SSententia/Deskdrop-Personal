@@ -1,24 +1,69 @@
-*.iml
-.idea
-.gradle
-.kotlin
-local.properties
-.DS_Store
-Gemfile
-build
-app/build
-app/release
-app/.cxx
-app/.attach_*
-fastlane/Appfile
-tools/*.txt
-*.patch
-*.diff
-*.sh
-deskdrop-release.keystore
+# Compiled and build artifacts
+*.class
+*.o
+*.obj
+*.out
+*.dll
+*.so
+*.a
+*.pyc
+__pycache__/
 
-# Stray files in repo root
-/cards_*.png
-/tips_*.png
-/*.png
-/full-logcat.txt
+# Dependencies
+node_modules/
+venv/
+.venv/
+.mypy_cache/
+.pytest_cache/
+target/
+.gradle/
+
+# Build directories
+dist/
+build/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db
+.env
+.env.local
+*.env.*
+
+# Logs and temp files
+*.log
+*.tmp
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst

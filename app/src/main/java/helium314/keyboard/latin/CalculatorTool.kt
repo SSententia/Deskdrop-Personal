@@ -38,6 +38,15 @@ import helium314.keyboard.settings.screens.brandTeal
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.encodeToString
+import kotlin.math.pow
+import kotlin.math.sqrt
+import kotlin.math.sin
+import kotlin.math.cos
+import kotlin.math.tan
+import kotlin.math.log10
+import kotlin.math.ln
+import kotlin.math.exp
+import kotlin.math.abs
 
 @Serializable
 data class CustomMathFunction(
@@ -158,7 +167,7 @@ class MathParser(private val expr: String, val variables: Map<String, Double> = 
             } else if (ch == '√'.code) {
                 nextChar()
                 x = parseFactor()
-                x = kotlin.math.sqrt(x)
+                x = sqrt(x)
             } else {
                 while ((ch >= 'a'.code && ch <= 'z'.code) || (ch >= 'A'.code && ch <= 'Z'.code) || (ch >= '0'.code && ch <= '9'.code) || ch == '_'.code) nextChar()
                 val name = expr.substring(startPos, this.pos)
@@ -171,14 +180,14 @@ class MathParser(private val expr: String, val variables: Map<String, Double> = 
                 } else {
                     val arg = parseFactor()
                     x = when (name) {
-                        "sqrt" -> kotlin.math.sqrt(arg)
-                        "sin" -> kotlin.math.sin(arg)
-                        "cos" -> kotlin.math.cos(arg)
-                        "tan" -> kotlin.math.tan(arg)
-                        "log" -> kotlin.math.log10(arg)
-                        "ln" -> kotlin.math.ln(arg)
-                        "exp" -> kotlin.math.exp(arg)
-                        "abs" -> kotlin.math.abs(arg)
+                        "sqrt" -> sqrt(arg)
+                        "sin" -> sin(arg)
+                        "cos" -> cos(arg)
+                        "tan" -> tan(arg)
+                        "log" -> log10(arg)
+                        "ln" -> ln(arg)
+                        "exp" -> exp(arg)
+                        "abs" -> abs(arg)
                         else -> throw RuntimeException("Unknown function: $name")
                     }
                 }
@@ -189,7 +198,7 @@ class MathParser(private val expr: String, val variables: Map<String, Double> = 
 
         while (true) {
             if (eat('^'.code)) {
-                x = kotlin.math.pow(x, parseFactor())
+                x = pow(x, parseFactor())
             } else if (eat('!'.code)) {
                 x = factorial(x)
             } else {
