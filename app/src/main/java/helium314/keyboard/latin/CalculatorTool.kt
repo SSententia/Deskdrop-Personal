@@ -14,7 +14,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -265,6 +274,21 @@ enum class CalculatorScreen {
     CREATE_FUNCTION
 }
 
+/** Insert text into the currently active field: prefers the dialog edit text (e.g. floating note)
+ *  over the IME's current input connection (which may point to the background app). */
+private fun insertIntoActiveField(ime: LatinIME, text: String) {
+    val dialogEdit = ime.getDialogEditText()
+    if (dialogEdit != null) {
+        val start = dialogEdit.selectionStart.coerceAtLeast(0)
+        val end = dialogEdit.selectionEnd.coerceAtLeast(start)
+        dialogEdit.text.replace(start, end, text)
+        dialogEdit.setSelection(start + text.length)
+        ime.setDialogCursorPos(start + text.length)
+    } else {
+        ime.currentInputConnection?.commitText(text, 1)
+    }
+}
+
 fun showCalculatorTool(ime: LatinIME) {
     showImeComposeDialog(
         ime = ime,
@@ -327,6 +351,7 @@ fun CalculatorContent(ime: LatinIME) {
             }
             CalculatorScreen.CREATE_FUNCTION -> {
                 CreateFunctionScreen(
+                    ime = ime,
                     onBack = { currentScreen = CalculatorScreen.FUNCTIONS_LIST },
                     onSave = { newFn ->
                         val updated = customFunctions + newFn
@@ -531,7 +556,7 @@ fun MainCalcScreen(
                                     }
                                     "Insert" -> {
                                         if (resultStr.isNotEmpty() && resultStr != "Infinity" && resultStr != "NaN") {
-                                            ime.currentInputConnection?.commitText(resultStr, 1)
+                                            insertIntoActiveField(ime, resultStr)
                                             ime.getActiveDialog()?.dismiss()
                                         }
                                     }
@@ -782,7 +807,7 @@ fun RunFunctionScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = {
-                                ime.currentInputConnection?.commitText(formattedResult, 1)
+                                insertIntoActiveField(ime, formattedResult)
                                 ime.getActiveDialog()?.dismiss()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = brandTeal()),
@@ -799,6 +824,7 @@ fun RunFunctionScreen(
 
 @Composable
 fun CreateFunctionScreen(
+    ime: LatinIME,
     onBack: () -> Unit,
     onSave: (CustomMathFunction) -> Unit
 ) {
@@ -860,54 +886,96 @@ fun CreateFunctionScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Function Name Field
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Function Name (e.g. area)") },
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = brandTeal(),
-                    unfocusedBorderColor = Color.Gray,
-                    focusedLabelColor = brandTeal(),
-                    unfocusedLabelColor = Color.Gray,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                modifier = Modifier.fillMaxWidth()
+            AndroidView(
+                factory = { ctx ->
+                    EditText(ctx).apply {
+                        setText(name)
+                        hint = "Function Name (e.g. area)"
+                        setHintTextColor(AndroidColor.argb(100, 255, 255, 255))
+                        background = GradientDrawable().apply {
+                            setColor(AndroidColor.argb(15, 255, 255, 255))
+                            setStroke(1, AndroidColor.argb(80, 255, 255, 255))
+                            cornerRadius = 8f
+                        }
+                        setPadding(16, 12, 16, 12)
+                        setTextColor(AndroidColor.WHITE)
+                        setSingleLine(true)
+                        setOnFocusChangeListener { v, hasFocus ->
+                            if (hasFocus) ime.setDialogEditText(v as EditText)
+                        }
+                        addTextChangedListener(object : android.text.TextWatcher {
+                            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                                name = s?.toString() ?: ""
+                            }
+                            override fun afterTextChanged(s: android.text.Editable?) {}
+                        })
+                    }
+                },
+                update = { et -> if (et.text.toString() != name) et.setText(name) },
+                modifier = Modifier.fillMaxWidth().height(48.dp)
             )
 
             // Parameters Field
-            OutlinedTextField(
-                value = params,
-                onValueChange = { params = it },
-                label = { Text("Parameters (comma separated, e.g. w, h)") },
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = brandTeal(),
-                    unfocusedBorderColor = Color.Gray,
-                    focusedLabelColor = brandTeal(),
-                    unfocusedLabelColor = Color.Gray,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                modifier = Modifier.fillMaxWidth()
+            AndroidView(
+                factory = { ctx ->
+                    EditText(ctx).apply {
+                        setText(params)
+                        hint = "Parameters (comma separated, e.g. w, h)"
+                        setHintTextColor(AndroidColor.argb(100, 255, 255, 255))
+                        background = GradientDrawable().apply {
+                            setColor(AndroidColor.argb(15, 255, 255, 255))
+                            setStroke(1, AndroidColor.argb(80, 255, 255, 255))
+                            cornerRadius = 8f
+                        }
+                        setPadding(16, 12, 16, 12)
+                        setTextColor(AndroidColor.WHITE)
+                        setSingleLine(true)
+                        setOnFocusChangeListener { v, hasFocus ->
+                            if (hasFocus) ime.setDialogEditText(v as EditText)
+                        }
+                        addTextChangedListener(object : android.text.TextWatcher {
+                            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                                params = s?.toString() ?: ""
+                            }
+                            override fun afterTextChanged(s: android.text.Editable?) {}
+                        })
+                    }
+                },
+                update = { et -> if (et.text.toString() != params) et.setText(params) },
+                modifier = Modifier.fillMaxWidth().height(48.dp)
             )
 
             // Expression Field
-            OutlinedTextField(
-                value = expression,
-                onValueChange = { expression = it },
-                label = { Text("Expression (e.g. w * h)") },
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = brandTeal(),
-                    unfocusedBorderColor = Color.Gray,
-                    focusedLabelColor = brandTeal(),
-                    unfocusedLabelColor = Color.Gray,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                modifier = Modifier.fillMaxWidth()
+            AndroidView(
+                factory = { ctx ->
+                    EditText(ctx).apply {
+                        setText(expression)
+                        hint = "Expression (e.g. w * h)"
+                        setHintTextColor(AndroidColor.argb(100, 255, 255, 255))
+                        background = GradientDrawable().apply {
+                            setColor(AndroidColor.argb(15, 255, 255, 255))
+                            setStroke(1, AndroidColor.argb(80, 255, 255, 255))
+                            cornerRadius = 8f
+                        }
+                        setPadding(16, 12, 16, 12)
+                        setTextColor(AndroidColor.WHITE)
+                        setSingleLine(true)
+                        setOnFocusChangeListener { v, hasFocus ->
+                            if (hasFocus) ime.setDialogEditText(v as EditText)
+                        }
+                        addTextChangedListener(object : android.text.TextWatcher {
+                            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                                expression = s?.toString() ?: ""
+                            }
+                            override fun afterTextChanged(s: android.text.Editable?) {}
+                        })
+                    }
+                },
+                update = { et -> if (et.text.toString() != expression) et.setText(expression) },
+                modifier = Modifier.fillMaxWidth().height(48.dp)
             )
 
             if (validationError != null) {
