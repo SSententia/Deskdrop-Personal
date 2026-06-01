@@ -407,6 +407,16 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
                 spawnFloatingNoteWithSavedConfig(context)
                 return
             }
+            // Calculator + Browser: open directly (bypasses dialog EditText routing in onCodeInput
+            // which would otherwise intercept these when a dialog EditText like floating notes is focused)
+            if (tag == ToolbarKey.CALCULATOR) {
+                (listener as? helium314.keyboard.latin.LatinIME)?.showCalculatorTool()
+                return
+            }
+            if (tag == ToolbarKey.BROWSER) {
+                (listener as? helium314.keyboard.latin.LatinIME)?.showBrowserTool()
+                return
+            }
             val code = getCodeForToolbarKey(tag)
             if (code != KeyCode.UNSPECIFIED) {
                 Log.d(TAG, "click toolbar key $tag")

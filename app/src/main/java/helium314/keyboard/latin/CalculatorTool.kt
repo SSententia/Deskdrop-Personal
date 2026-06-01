@@ -1,22 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package helium314.keyboard.latin
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color as AndroidColor
 import android.graphics.drawable.GradientDrawable
-import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.EditText
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -26,9 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -189,7 +184,7 @@ class MathParser(private val expr: String, val variables: Map<String, Double> = 
 
         while (true) {
             if (eat('^'.code)) {
-                x = kotlin.math.pow(x, parseFactor())
+                x = Math.pow(x, parseFactor())
             } else if (eat('!'.code)) {
                 x = factorial(x)
             } else {
@@ -414,15 +409,28 @@ fun MainCalcScreen(
             }
         }
 
-        // Display area
+        // Display area — phone calculator style: result above input
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .background(Color(0xFF252525), RoundedCornerShape(8.dp))
-                .padding(8.dp),
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
+            // Result preview — updates in real-time as you type
+            if (resultStr.isNotEmpty()) {
+                Text(
+                    text = resultStr,
+                    color = Color.Gray,
+                    fontSize = 14.sp,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 2.dp),
+                    textAlign = TextAlign.End
+                )
+            }
+            // Expression input
             AndroidView(
                 factory = { ctx ->
                     EditText(ctx).apply {
@@ -459,16 +467,6 @@ fun MainCalcScreen(
                     }
                 }
             )
-
-            if (resultStr.isNotEmpty()) {
-                Text(
-                    text = "= $resultStr",
-                    color = brandTeal(),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.End).padding(top = 4.dp)
-                )
-            }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
