@@ -417,19 +417,25 @@ fun MainCalcScreen(
                 .background(Color(0xFF252525), RoundedCornerShape(8.dp))
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            // Result preview — updates in real-time as you type
-            if (resultStr.isNotEmpty()) {
-                Text(
-                    text = resultStr,
-                    color = Color.Gray,
-                    fontSize = 14.sp,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 2.dp),
-                    textAlign = TextAlign.End
-                )
+            // Result preview area — bumped up slightly to 22.dp to prevent clipping
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(22.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                if (resultStr.isNotEmpty()) {
+                    Text(
+                        text = resultStr,
+                        color = Color.Gray,
+                        fontSize = 14.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(bottom = 2.dp),
+                        textAlign = TextAlign.End
+                    )
+                }
             }
+            
             // Expression input
             AndroidView(
                 factory = { ctx ->
@@ -438,6 +444,11 @@ fun MainCalcScreen(
                         hint = "0"
                         setHintTextColor(AndroidColor.argb(100, 255, 255, 255))
                         background = null
+                        
+                        // FIX: Explicitly remove native padding and font padding overrides
+                        setPadding(0, 0, 0, 0)
+                        setIncludeFontPadding(false)
+                        
                         setTextColor(AndroidColor.WHITE)
                         textSize = 20f
                         setSingleLine(true)
@@ -513,6 +524,9 @@ fun MainCalcScreen(
                                             exprInput = resultStr
                                             editTextRef?.setText(resultStr)
                                             editTextRef?.setSelection(resultStr.length)
+                                            // keep focus on the calculator input so user can continue calculations
+                                            editTextRef?.requestFocus()
+                                            editTextRef?.let { ime.setDialogEditText(it) }
                                         }
                                     }
                                     "Insert" -> {
