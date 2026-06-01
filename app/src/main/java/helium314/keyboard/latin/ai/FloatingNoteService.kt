@@ -198,6 +198,10 @@ class FloatingNoteService : Service() {
                 var isCamouflaged by remember { mutableStateOf(false) }
                 var showCloseConfirmation by remember { mutableStateOf(false) }
                 var editTextRef by remember { mutableStateOf<EditText?>(null) }
+                var isBrowserMode by remember { mutableStateOf(false) }
+                var browserUrlInput by remember { mutableStateOf("https://www.google.com") }
+                var browserWebViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
+                val desktopUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
                 // Camouflage timer logic
                 LaunchedEffect(isEditing) {
@@ -300,29 +304,40 @@ class FloatingNoteService : Service() {
                                     Spacer(modifier = Modifier.width(8.dp))
                                 }
 
-                                // Browser Button - opens web browser
+                                // Back-to-note button — shown when in browser mode
+                                if (isBrowserMode) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .clickable {
+                                                isBrowserMode = false
+                                                browserUrlInput = "https://www.google.com"
+                                            }
+                                            .background(Color(0xFFFF9800), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "←",
+                                            color = Color.White,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+
+                                // Browser Button - toggle embedded browser
                                 Box(
                                     modifier = Modifier
                                         .size(24.dp)
                                         .clickable {
-                                            try {
-                                                val ime = helium314.keyboard.latin.LatinIME.getInstance()
-                                                if (ime != null) {
-                                                    // Open the in-app BrowserTool
-                                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                                        helium314.keyboard.latin.BrowserToolKt.showBrowserTool(ime)
-                                                    }
-                                                } else {
-                                                    // Fallback to system browser if IME is not available
-                                                    val browserIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com"))
-                                                    browserIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                    startActivity(browserIntent)
-                                                }
-                                            } catch (e: Exception) {
-                                                android.util.Log.w(TAG, "Failed to open browser", e)
+                                            isBrowserMode = !isBrowserMode
+                                            if (isBrowserMode) {
+                                                isEditingState.value = false
+                                                editTextRef?.clearFocus()
                                             }
                                         }
-                                        .background(Color(0xFF2196F3), CircleShape),
+                                        .background(if (isBrowserMode) Color(0xFF4CAF50) else Color(0xFF2196F3), CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -351,60 +366,153 @@ class FloatingNoteService : Service() {
                                 }
                             }
 
-                            // Text Area
+                            // Content Area - switches between note and browser
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .weight(1f)
-                                    .padding(12.dp)
                             ) {
-                                AndroidView(
-                                    factory = { ctx ->
-                                        EditText(ctx).apply {
-                                            editTextRef = this
-                                            setText(initialText)
-                                            setHint("Tap to note...")
-                                            setHintTextColor(android.graphics.Color.argb(136, 255, 255, 255))
-                                            background = null
-                                            setTextColor(android.graphics.Color.WHITE)
-                                            textSize = 16f
-                                            includeFontPadding = false
-                                            layoutParams = ViewGroup.LayoutParams(
-                                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                                ViewGroup.LayoutParams.MATCH_PARENT
+                                if (isBrowserMode) {
+                                    // Browser mode: URL bar + WebView
+                                    Column(modifier = Modifier.fillMaxSize().padding(4.dp)) {
+                                        // URL Bar
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            AndroidView(
+                                                factory = { ctx ->
+                                                    EditText(ctx).apply {
+                                                        setText(browserUrlInput)
+                                                        hint = "Enter URL or search..."
+                                                        setHintTextColor(android.graphics.Color.argb(100, 255, 255, 255))
+                                                        setSingleLine(true)
+                                                        background = null
+                                                        setTextColor(android.graphics.Color.WHITE)
+                                                        textSize = 12f
+                                                        layoutParams = ViewGroup.LayoutParams(
+                                                            ViewGroup.LayoutParams.MATCH_PARENT,
+                                                            ViewGroup.LayoutParams.WRAP_CONTENT
+                                                        )
+                                                        setOnEditorActionListener { _, actionId, _ ->
+                                                            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_GO) {
+                                                                browserUrlInput = text.toString()
+                                                                var target = browserUrlInput.trim()
+                                                                if (target.isNotEmpty()) {
+                                                                    if (!target.contains(".") && !target.startsWith("http")) {
+                                                                        target = "https://www.google.com/search?q=" + target
+                                                                    } else if (!target.startsWith("http")) {
+                                                                        target = "https://" + target
+                                                                    }
+                                                                    browserWebViewRef?.loadUrl(target, java.util.Collections.singletonMap("User-Agent", desktopUA))
+                                                                }
+                                                                true
+                                                            } else false
+                                                        }
+                                                        setOnFocusChangeListener { v, hasFocus ->
+                                                            if (hasFocus) {
+                                                                val ime = LatinIME.getInstance()
+                                                                ime?.setDialogEditText(v as EditText)
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                                update = { editText ->
+                                                    if (editText.text.toString() != browserUrlInput) {
+                                                        editText.setText(browserUrlInput)
+                                                        editText.setSelection(browserUrlInput.length)
+                                                    }
+                                                }
                                             )
-                                            setLineSpacing(0f, 1.15f)
-
-                                            // Handle internal focus changes
-                                            setOnFocusChangeListener { v, hasFocus ->
-                                                isEditingState.value = hasFocus
-                                                val ime = LatinIME.getInstance()
-                                                if (hasFocus) {
-                                                    ime?.setDialogEditText(this)
-                                                    // FORCE the keyboard to slide up
-                                                    ime?.startShowingInputView(true)
-                                                } else {
-                                                    ime?.setDialogEditText(null)
-                                                    ime?.requestHideSelf(0)
-                                                }
-                                            }
-                                            
-                                            // Overlays sometimes swallow the first tap without triggering 
-                                            // onFocusChange, so we explicitly catch the touch event.
-                                            setOnTouchListener { view, event ->
-                                                if (event.action == android.view.MotionEvent.ACTION_UP) {
-                                                    view.requestFocus()
-                                                    val ime = LatinIME.getInstance()
-                                                    ime?.setDialogEditText(view as EditText)
-                                                    ime?.startShowingInputView(true)
-                                                    isEditingState.value = true
-                                                }
-                                                false
-                                            }
                                         }
-                                    },
-                                    modifier = Modifier.fillMaxSize()
-                                )
+                                        // WebView
+                                        AndroidView(
+                                            factory = { ctx ->
+                                                // Reuse existing WebView to avoid memory leaks on toggle
+                                                browserWebViewRef?.destroy()
+                                                android.webkit.WebView(ctx).apply {
+                                                    browserWebViewRef = this
+                                                    settings.javaScriptEnabled = true
+                                                    settings.domStorageEnabled = true
+                                                    settings.loadWithOverviewMode = true
+                                                    settings.useWideViewPort = true
+                                                    settings.userAgentString = desktopUA
+                                                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                                                    val cm = android.webkit.CookieManager.getInstance()
+                                                    cm.setAcceptCookie(true)
+                                                    cm.setAcceptThirdPartyCookies(this, true)
+                                                    webViewClient = object : android.webkit.WebViewClient() {
+                                                        override fun onPageStarted(view: android.webkit.WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                                                            super.onPageStarted(view, url, favicon)
+                                                            url?.let { browserUrlInput = it }
+                                                            // Inject anti-detection JS to fix login security warnings
+                                                            val js = "(function() { var d='" + desktopUA.replace("'", "\'") + "'; Object.defineProperty(navigator,'userAgent',{get:function(){return d;},configurable:true}); Object.defineProperty(navigator,'platform',{get:function(){return 'Win32';},configurable:true}); Object.defineProperty(navigator,'vendor',{get:function(){return 'Google Inc.';},configurable:true}); if(typeof chrome==='undefined'){window.chrome={};} if(typeof chrome.webstore==='undefined'){chrome.webstore={};} })();"
+                                                            view?.evaluateJavascript(js, null)
+                                                        }
+                                                        override fun shouldOverrideUrlLoading(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                                                            if (request != null && view != null && request.isForMainFrame) {
+                                                                val h = java.util.HashMap<String, String>()
+                                                                request.requestHeaders?.forEach { (key, value) -> h[key] = value }
+                                                                h["User-Agent"] = desktopUA
+                                                                view.loadUrl(request.url.toString(), h)
+                                                                return true
+                                                            }
+                                                            return false
+                                                        }
+                                                    }
+                                                    loadUrl(browserUrlInput, java.util.Collections.singletonMap("User-Agent", desktopUA))
+                                                }
+                                            },
+                                            modifier = Modifier.weight(1f).fillMaxWidth()
+                                        )
+                                    }
+                                } else {
+                                    // Note mode: EditText
+                                    AndroidView(
+                                        factory = { ctx ->
+                                            EditText(ctx).apply {
+                                                editTextRef = this
+                                                setText(initialText)
+                                                setHint("Tap to note...")
+                                                setHintTextColor(android.graphics.Color.argb(136, 255, 255, 255))
+                                                background = null
+                                                setTextColor(android.graphics.Color.WHITE)
+                                                textSize = 16f
+                                                includeFontPadding = false
+                                                layoutParams = ViewGroup.LayoutParams(
+                                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                                    ViewGroup.LayoutParams.MATCH_PARENT
+                                                )
+                                                setLineSpacing(0f, 1.15f)
+
+                                                setOnFocusChangeListener { v, hasFocus ->
+                                                    isEditingState.value = hasFocus
+                                                    val ime = LatinIME.getInstance()
+                                                    if (hasFocus) {
+                                                        ime?.setDialogEditText(this)
+                                                        ime?.startShowingInputView(true)
+                                                    } else {
+                                                        ime?.setDialogEditText(null)
+                                                        ime?.requestHideSelf(0)
+                                                    }
+                                                }
+
+                                                setOnTouchListener { view, event ->
+                                                    if (event.action == android.view.MotionEvent.ACTION_UP) {
+                                                        view.requestFocus()
+                                                        val ime = LatinIME.getInstance()
+                                                        ime?.setDialogEditText(view as EditText)
+                                                        ime?.startShowingInputView(true)
+                                                        isEditingState.value = true
+                                                    }
+                                                    false
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxSize().padding(12.dp)
+                                    )
+                                }
                             }
                         } // Column closes
 
