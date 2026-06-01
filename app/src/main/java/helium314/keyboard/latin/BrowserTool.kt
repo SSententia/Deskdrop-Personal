@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import helium314.keyboard.latin.utils.showImeComposeDialog
 
+private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+
 object BrowserSession {
     private var webView: WebView? = null
     var lastUrl: String = "https://www.google.com"
@@ -47,7 +49,7 @@ object BrowserSession {
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
                 // Use a modern desktop Chrome user agent to avoid websites blocking the mobile WebView
-                settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+                settings.userAgentString = DESKTOP_USER_AGENT
                 // Allow mixed content (HTTPS pages loading HTTP resources)
                 settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 // Enable database storage for web apps
@@ -61,9 +63,19 @@ object BrowserSession {
                         super.onPageStarted(view, url, favicon)
                         url?.let { lastUrl = it }
                     }
+                    override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                        if (request != null && view != null && request.isForMainFrame) {
+                            val headers = mutableMapOf<String, String>()
+                            request.requestHeaders?.forEach { (key, value) -> headers[key] = value }
+                            headers["User-Agent"] = DESKTOP_USER_AGENT
+                            view.loadUrl(request.url.toString(), headers)
+                            return true
+                        }
+                        return false
+                    }
                 }
             }
-            webView?.loadUrl(lastUrl)
+            webView?.loadUrl(lastUrl, mapOf("User-Agent" to DESKTOP_USER_AGENT))
         }
         return webView!!
     }
@@ -105,7 +117,8 @@ fun BrowserContent(ime: LatinIME) {
         } else if (!target.startsWith("http")) {
             target = "https://$target"
         }
-        webView.loadUrl(target)
+        // Force desktop user agent on every navigation to prevent mobile reversion
+        webView.loadUrl(target, mapOf("User-Agent" to DESKTOP_USER_AGENT))
     }
 
     LaunchedEffect(webView) {
@@ -122,6 +135,20 @@ fun BrowserContent(ime: LatinIME) {
                 isLoading = false
                 canGoBack = webView.canGoBack()
                 canGoForward = webView.canGoForward()
+            }
+
+            // Force desktop user agent on every link click to prevent mobile reversion
+            override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                if (request != null && view != null && request.isForMainFrame) {
+                    val headers = mutableMapOf<String, String>()
+                    // Copy existing request headers to preserve cookies/auth
+                    request.requestHeaders?.forEach { (key, value) -> headers[key] = value }
+                    // Override with desktop user agent
+                    headers["User-Agent"] = DESKTOP_USER_AGENT
+                    view.loadUrl(request.url.toString(), headers)
+                    return true
+                }
+                return false
             }
         }
     }

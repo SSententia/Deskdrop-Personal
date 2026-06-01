@@ -306,9 +306,18 @@ class FloatingNoteService : Service() {
                                         .size(24.dp)
                                         .clickable {
                                             try {
-                                                val browserIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com"))
-                                                browserIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                startActivity(browserIntent)
+                                                val ime = helium314.keyboard.latin.LatinIME.getInstance()
+                                                if (ime != null) {
+                                                    // Open the in-app BrowserTool
+                                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                                        helium314.keyboard.latin.BrowserToolKt.showBrowserTool(ime)
+                                                    }
+                                                } else {
+                                                    // Fallback to system browser if IME is not available
+                                                    val browserIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com"))
+                                                    browserIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                    startActivity(browserIntent)
+                                                }
                                             } catch (e: Exception) {
                                                 android.util.Log.w(TAG, "Failed to open browser", e)
                                             }
