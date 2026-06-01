@@ -46,6 +46,16 @@ object BrowserSession {
                 settings.domStorageEnabled = true
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
+                // Use a modern desktop Chrome user agent to avoid websites blocking the mobile WebView
+                settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+                // Allow mixed content (HTTPS pages loading HTTP resources)
+                settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                // Enable database storage for web apps
+                settings.databaseEnabled = true
+                // Allow cookies for login sessions
+                val cookieManager = android.webkit.CookieManager.getInstance()
+                cookieManager.setAcceptCookie(true)
+                cookieManager.setAcceptThirdPartyCookies(this, true)
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         super.onPageStarted(view, url, favicon)

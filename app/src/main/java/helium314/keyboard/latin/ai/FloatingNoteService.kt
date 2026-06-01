@@ -300,6 +300,31 @@ class FloatingNoteService : Service() {
                                     Spacer(modifier = Modifier.width(8.dp))
                                 }
 
+                                // Browser Button - opens web browser
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clickable {
+                                            try {
+                                                val browserIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com"))
+                                                browserIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                startActivity(browserIntent)
+                                            } catch (e: Exception) {
+                                                android.util.Log.w(TAG, "Failed to open browser", e)
+                                            }
+                                        }
+                                        .background(Color(0xFF2196F3), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "🌐",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+
                                 // Close Button
                                 Box(
                                     modifier = Modifier
