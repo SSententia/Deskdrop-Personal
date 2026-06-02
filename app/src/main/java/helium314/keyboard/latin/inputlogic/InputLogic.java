@@ -529,6 +529,17 @@ public final class InputLogic {
                     dialogEdit.onTextContextMenuItem(android.R.id.cut);
                 } else if (keyCode == KeyCode.CLIPBOARD_SELECT_ALL) {
                     dialogEdit.selectAll();
+                } else if (code == Constants.CODE_ENTER) {
+                    final int imeAction = dialogEdit.getImeOptions() & EditorInfo.IME_MASK_ACTION;
+                    if (imeAction != EditorInfo.IME_ACTION_NONE && imeAction != EditorInfo.IME_ACTION_UNSPECIFIED) {
+                        dialogEdit.onEditorAction(imeAction);
+                    } else {
+                        // No specific action configured, insert newline as fallback
+                        int start = Math.min(selStart, selEnd);
+                        int end = Math.max(selStart, selEnd);
+                        dialogEdit.getText().replace(start, end, "\n");
+                        mLatinIME.setDialogCursorPos(start + 1);
+                    }
                 } else if (code > 0) {
                     String ch = String.valueOf((char) code);
                     int start = Math.min(selStart, selEnd);
@@ -872,6 +883,9 @@ public final class InputLogic {
                 break;
             case KeyCode.BROWSER:
                 mLatinIME.showBrowserTool();
+                break;
+            case KeyCode.CALCULATOR:
+                mLatinIME.showCalculatorTool();
                 break;
             case KeyCode.FLOATING_NOTE:
                 mLatinIME.showFloatingNoteConfigDialog();

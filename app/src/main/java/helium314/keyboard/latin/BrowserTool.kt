@@ -24,6 +24,34 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import helium314.keyboard.latin.utils.showImeComposeDialog
 
+private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+
+// JavaScript to inject on page load to fix login security warnings
+// Overrides navigator properties that websites use to detect WebView
+private val ANTI_DETECTION_JS = """
+(function() {
+    var d = "$DESKTOP_USER_AGENT";
+    Object.defineProperty(navigator, 'userAgent', {
+        get: function() { return d; },
+        configurable: true
+    });
+    Object.defineProperty(navigator, 'platform', {
+        get: function() { return 'Win32'; },
+        configurable: true
+    });
+    Object.defineProperty(navigator, 'vendor', {
+        get: function() { return 'Google Inc.'; },
+        configurable: true
+    });
+    if (typeof window.chrome === 'undefined') {
+        window.chrome = {};
+    }
+    if (typeof window.chrome.webstore === 'undefined') {
+        window.chrome.webstore = {};
+    }
+})();
+""".trimIndent()
+
 object BrowserSession {
     private var webView: WebView? = null
     var lastUrl: String = "https://www.google.com"
@@ -46,14 +74,36 @@ object BrowserSession {
                 settings.domStorageEnabled = true
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
+                // Use a modern desktop Chrome user agent to avoid websites blocking the mobile WebView
+                settings.userAgentString = DESKTOP_USER_AGENT
+                // Allow mixed content (HTTPS pages loading HTTP resources)
+                settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                // Enable database storage for web apps
+                settings.databaseEnabled = true
+                // Allow cookies for login sessions
+                val cookieManager = android.webkit.CookieManager.getInstance()
+                cookieManager.setAcceptCookie(true)
+                cookieManager.setAcceptThirdPartyCookies(this, true)
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         super.onPageStarted(view, url, favicon)
                         url?.let { lastUrl = it }
+                        // Inject anti-detection JS to fix "browser may not be secure" warnings
+                        view?.evaluateJavascript(ANTI_DETECTION_JS, null)
+                    }
+                    override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                        if (request != null && view != null && request.isForMainFrame) {
+                            val headers = mutableMapOf<String, String>()
+                            request.requestHeaders?.forEach { (key, value) -> headers[key] = value }
+                            headers["User-Agent"] = DESKTOP_USER_AGENT
+                            view.loadUrl(request.url.toString(), headers)
+                            return true
+                        }
+                        return false
                     }
                 }
             }
-            webView?.loadUrl(lastUrl)
+            webView?.loadUrl(lastUrl, mapOf("User-Agent" to DESKTOP_USER_AGENT))
         }
         return webView!!
     }
@@ -95,7 +145,8 @@ fun BrowserContent(ime: LatinIME) {
         } else if (!target.startsWith("http")) {
             target = "https://$target"
         }
-        webView.loadUrl(target)
+        // Force desktop user agent on every navigation to prevent mobile reversion
+        webView.loadUrl(target, mapOf("User-Agent" to DESKTOP_USER_AGENT))
     }
 
     LaunchedEffect(webView) {
@@ -106,12 +157,28 @@ fun BrowserContent(ime: LatinIME) {
                     urlInput = it
                     BrowserSession.lastUrl = it
                 }
+                // Inject anti-detection JS to fix "browser may not be secure" warnings
+                view?.evaluateJavascript(ANTI_DETECTION_JS, null)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 isLoading = false
                 canGoBack = webView.canGoBack()
                 canGoForward = webView.canGoForward()
+            }
+
+            // Force desktop user agent on every link click to prevent mobile reversion
+            override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                if (request != null && view != null && request.isForMainFrame) {
+                    val headers = mutableMapOf<String, String>()
+                    // Copy existing request headers to preserve cookies/auth
+                    request.requestHeaders?.forEach { (key, value) -> headers[key] = value }
+                    // Override with desktop user agent
+                    headers["User-Agent"] = DESKTOP_USER_AGENT
+                    view.loadUrl(request.url.toString(), headers)
+                    return true
+                }
+                return false
             }
         }
     }
