@@ -19,7 +19,6 @@ import android.view.ActionMode
 import android.view.Gravity
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
@@ -68,6 +67,17 @@ class FloatingNoteService : Service() {
     private var camouflageHandler = Handler(Looper.getMainLooper())
     private var camouflageRunnable: Runnable? = null
 
+    // Periodic z-order heartbeat: re-adds the window to stay on top of competing overlays.
+    // Paused while the user is editing to avoid disrupting the IME connection.
+    private var heartbeatHandler = Handler(Looper.getMainLooper())
+    private var heartbeatRunnable: Runnable? = null
+    private var currentParams: WindowManager.LayoutParams? = null
+    private var currentWrapper: android.view.View? = null
+    @Volatile
+    private var isEditingActive = false
+    @Volatile
+    private var isDragging = false
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -92,11 +102,11 @@ class FloatingNoteService : Service() {
             Log.w(TAG, "SYSTEM_ALERT_WINDOW permission not granted - cannot show floating note")
             try {
                 Toast.makeText(this, "Please grant 'Display over other apps' permission for floating notes", Toast.LENGTH_LONG).show()
-                val intent = Intent(
+                val permIntent = Intent(
                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:${packageName}")
                 ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(intent)
+                startActivity(permIntent)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to request overlay permission", e)
             }
@@ -159,9 +169,8 @@ class FloatingNoteService : Service() {
         owner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_RESUME)
         lifecycleOwner = owner
 
-        // Stable window flags: NOT_FOCUSABLE so overlay never steals window focus,
-        // ALT_FOCUSABLE_IM so IME can route text input to EditText views within.
-        // These flags are NEVER toggled — that was the source of Bug 1 and Bug 3.
+        // System overlay with stable window flags: NOT_FOCUSABLE so overlay never steals
+        // window focus, ALT_FOCUSABLE_IM so IME can route text input to EditText views within.
         val params = WindowManager.LayoutParams(
             widthPx,
             heightPx,
@@ -177,8 +186,7 @@ class FloatingNoteService : Service() {
             gravity = Gravity.TOP or Gravity.START
             x = initialX
             y = initialY
-            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
-                           WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
         }
 
         // Wrapper FrameLayout that prevents action mode (to avoid BadTokenException).
@@ -259,10 +267,15 @@ class FloatingNoteService : Service() {
                                     .fillMaxWidth()
                                     .background(Color(0xFF2A2A2A))
                                     .pointerInput(Unit) {
-                                        detectDragGestures { change, dragAmount ->
-                                            change.consume()
-                                            onDrag(dragAmount.x, dragAmount.y)
-                                        }
+                                        detectDragGestures(
+                                            onDragStart = { isDragging = true },
+                                            onDragEnd = { isDragging = false },
+                                            onDragCancel = { isDragging = false },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                onDrag(dragAmount.x, dragAmount.y)
+                                            }
+                                        )
                                     }
                                     .padding(horizontal = 8.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -275,22 +288,21 @@ class FloatingNoteService : Service() {
                                         .background(Color(0x66FFFFFF), RoundedCornerShape(2.dp))
                                 )
 
-                                Spacer(modifier = Modifier.weight(1f))
-
-                                // Done/checkmark button — shown when the EditText has focus
-                                if (isEditing) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .clickable {
-                                                // 1. Clear internal focus
-                                                editTextRef?.clearFocus()
-                                                // 2. Disconnect IME bridge and hide keyboard
-                                                val ime = LatinIME.getInstance()
-                                                ime?.setDialogEditText(null)
-                                                ime?.requestHideSelf(0)
-                                                isEditingState.value = false
-                                            }
+                                Spacer(modifier = Modifier.weight(1f))                                                // Done/checkmark button — shown when the EditText has focus
+                                                if (isEditing) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(24.dp)
+                                                            .clickable {
+                                                                // 1. Clear internal focus
+                                                                editTextRef?.clearFocus()
+                                                                // 2. Disconnect IME bridge and hide keyboard
+                                                                val ime = LatinIME.getInstance()
+                                                                ime?.setDialogEditText(null)
+                                                                ime?.requestHideSelf(0)
+                                                                isEditingState.value = false
+                                                                isEditingActive = false
+                                                            }
                                             .background(Color(0xFF4CAF50), CircleShape),
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -488,10 +500,15 @@ class FloatingNoteService : Service() {
 
                                                 setOnFocusChangeListener { v, hasFocus ->
                                                     isEditingState.value = hasFocus
+                                                    isEditingActive = hasFocus
                                                     val ime = LatinIME.getInstance()
                                                     if (hasFocus) {
                                                         ime?.setDialogEditText(this)
-                                                        ime?.startShowingInputView(true)
+                                                        // Post-delay to let focus settle before showing keyboard,
+                                                        // avoiding race conditions with the IME connection.
+                                                        mainHandler.postDelayed({
+                                                            ime?.startShowingInputView(true)
+                                                        }, 100L)
                                                     } else {
                                                         ime?.setDialogEditText(null)
                                                         ime?.requestHideSelf(0)
@@ -500,10 +517,18 @@ class FloatingNoteService : Service() {
 
                                                 setOnTouchListener { view, event ->
                                                     if (event.action == android.view.MotionEvent.ACTION_UP) {
+                                                        val hadFocus = (view as EditText).hasFocus()
                                                         view.requestFocus()
                                                         val ime = LatinIME.getInstance()
                                                         ime?.setDialogEditText(view as EditText)
-                                                        ime?.startShowingInputView(true)
+                                                        // If already focused (e.g., keyboard dismissed via back),
+                                                        // the focus listener won't fire, so show keyboard here.
+                                                        // Otherwise, OnFocusChangeListener handles it with a delay.
+                                                        if (hadFocus) {
+                                                            mainHandler.postDelayed({
+                                                                ime?.startShowingInputView(true)
+                                                            }, 100L)
+                                                        }
                                                         isEditingState.value = true
                                                     }
                                                     false
@@ -608,6 +633,9 @@ class FloatingNoteService : Service() {
         try {
             wm?.addView(wrapper, params)
             composeView = wrapper
+            currentParams = params
+            currentWrapper = wrapper
+            startHeartbeat()
             Log.d(TAG, "Floating note successfully added to WindowManager")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to add floating note to WindowManager: ${e.message}", e)
@@ -637,8 +665,39 @@ class FloatingNoteService : Service() {
         }
     }
 
+    private fun startHeartbeat() {
+        stopHeartbeat()
+        val run = object : Runnable {
+            override fun run() {
+                // Skip heartbeat while user is editing or dragging
+                if (isEditingActive || isDragging) {
+                    heartbeatHandler.postDelayed(this, 3000L)
+                    return
+                }
+                val wrapper = currentWrapper ?: return
+                val params = currentParams ?: return
+                try {
+                    // updateViewLayout nudges z-order on many Android versions
+                    // without destroying the view's state (no content loss).
+                    wm?.updateViewLayout(wrapper, params)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Heartbeat update failed, will retry", e)
+                }
+                heartbeatHandler.postDelayed(this, 3000L)
+            }
+        }
+        heartbeatRunnable = run
+        heartbeatHandler.postDelayed(run, 3000L)
+    }
+
+    private fun stopHeartbeat() {
+        heartbeatRunnable?.let { heartbeatHandler.removeCallbacks(it) }
+        heartbeatRunnable = null
+    }
+
     private fun removeFloatingNote() {
         val cleanup = Runnable {
+            stopHeartbeat()
             try {
                 composeView?.let {
                     try { wm?.removeView(it) } catch (_: Exception) {}
@@ -647,6 +706,8 @@ class FloatingNoteService : Service() {
                 Log.e(TAG, "Failed to remove floating note", e)
             }
             composeView = null
+            currentParams = null
+            currentWrapper = null
             lifecycleOwner?.let { owner ->
                 try {
                     owner.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_DESTROY)
