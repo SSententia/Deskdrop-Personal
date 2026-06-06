@@ -2,12 +2,14 @@
 package helium314.keyboard.latin
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.graphics.Bitmap
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -20,9 +22,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import helium314.keyboard.latin.utils.DeviceProtectedUtils
 import helium314.keyboard.latin.utils.showImeComposeDialog
+import org.json.JSONArray
+import org.json.JSONObject
 
 private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
@@ -52,6 +58,53 @@ private val ANTI_DETECTION_JS = """
 })();
 """.trimIndent()
 
+// --- Bookmark persistence ---
+private const val PREF_BOOKMARKS = "browser_bookmarks"
+
+data class Bookmark(val title: String, val url: String)
+
+private fun loadBookmarks(ime: LatinIME): List<Bookmark> {
+    val prefs = DeviceProtectedUtils.getSharedPreferences(ime)
+    val json = prefs.getString(PREF_BOOKMARKS, "[]") ?: "[]"
+    return try {
+        val arr = JSONArray(json)
+        (0 until arr.length()).map { i ->
+            val obj = arr.getJSONObject(i)
+            Bookmark(obj.getString("title"), obj.getString("url"))
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
+private fun saveBookmarks(ime: LatinIME, bookmarks: List<Bookmark>) {
+    val arr = JSONArray()
+    bookmarks.forEach { b ->
+        arr.put(JSONObject().apply {
+            put("title", b.title)
+            put("url", b.url)
+        })
+    }
+    DeviceProtectedUtils.getSharedPreferences(ime)
+        .edit()
+        .putString(PREF_BOOKMARKS, arr.toString())
+        .apply()
+}
+
+private fun toggleBookmark(ime: LatinIME, title: String, url: String): Boolean {
+    val existing = loadBookmarks(ime).toMutableList()
+    val idx = existing.indexOfFirst { it.url == url }
+    val added = if (idx >= 0) {
+        existing.removeAt(idx)
+        false
+    } else {
+        existing.add(Bookmark(title, url))
+        true
+    }
+    saveBookmarks(ime, existing)
+    return added
+}
+
 object BrowserSession {
     private var webView: WebView? = null
     var lastUrl: String = "https://www.google.com"
@@ -61,9 +114,6 @@ object BrowserSession {
         if (webView == null) {
             webView = object : WebView(ime) {
                 override fun startActionMode(callback: android.view.ActionMode.Callback?, type: Int): android.view.ActionMode? {
-                    // Always return null for action modes to prevent FloatingToolbar BadTokenException crashes.
-                    // This disables the selection menu, but selection handles remain usable.
-                    // Keyboard toolbar buttons (Copy/Paste) will be used instead.
                     return null
                 }
                 override fun startActionMode(callback: android.view.ActionMode.Callback?): android.view.ActionMode? {
@@ -74,13 +124,13 @@ object BrowserSession {
                 settings.domStorageEnabled = true
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
-                // Use a modern desktop Chrome user agent to avoid websites blocking the mobile WebView
                 settings.userAgentString = DESKTOP_USER_AGENT
-                // Allow mixed content (HTTPS pages loading HTTP resources)
                 settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                // Enable database storage for web apps
                 settings.databaseEnabled = true
-                // Allow cookies for login sessions
+                // Enable pinch-to-zoom and built-in zoom
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+                settings.setSupportZoom(true)
                 val cookieManager = android.webkit.CookieManager.getInstance()
                 cookieManager.setAcceptCookie(true)
                 cookieManager.setAcceptThirdPartyCookies(this, true)
@@ -88,7 +138,6 @@ object BrowserSession {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         super.onPageStarted(view, url, favicon)
                         url?.let { lastUrl = it }
-                        // Inject anti-detection JS to fix "browser may not be secure" warnings
                         view?.evaluateJavascript(ANTI_DETECTION_JS, null)
                     }
                     override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
@@ -136,6 +185,11 @@ fun BrowserContent(ime: LatinIME) {
     var canGoBack by remember { mutableStateOf(webView.canGoBack()) }
     var canGoForward by remember { mutableStateOf(webView.canGoForward()) }
     var isLoading by remember { mutableStateOf(false) }
+    var pageTitle by remember { mutableStateOf("") }
+    var showBookmarks by remember { mutableStateOf(false) }
+
+    // Bookmark state
+    var bookmarks by remember { mutableStateOf(loadBookmarks(ime)) }
 
     fun navigate() {
         var target = urlInput.trim()
@@ -145,8 +199,14 @@ fun BrowserContent(ime: LatinIME) {
         } else if (!target.startsWith("http")) {
             target = "https://$target"
         }
-        // Force desktop user agent on every navigation to prevent mobile reversion
         webView.loadUrl(target, mapOf("User-Agent" to DESKTOP_USER_AGENT))
+    }
+
+    // Initialize settings for zoom support
+    LaunchedEffect(webView) {
+        webView.settings.builtInZoomControls = true
+        webView.settings.displayZoomControls = false
+        webView.settings.setSupportZoom(true)
     }
 
     LaunchedEffect(webView) {
@@ -157,7 +217,7 @@ fun BrowserContent(ime: LatinIME) {
                     urlInput = it
                     BrowserSession.lastUrl = it
                 }
-                // Inject anti-detection JS to fix "browser may not be secure" warnings
+                pageTitle = view?.title ?: url ?: ""
                 view?.evaluateJavascript(ANTI_DETECTION_JS, null)
             }
 
@@ -165,15 +225,13 @@ fun BrowserContent(ime: LatinIME) {
                 isLoading = false
                 canGoBack = webView.canGoBack()
                 canGoForward = webView.canGoForward()
+                pageTitle = view?.title ?: url ?: ""
             }
 
-            // Force desktop user agent on every link click to prevent mobile reversion
             override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
                 if (request != null && view != null && request.isForMainFrame) {
                     val headers = mutableMapOf<String, String>()
-                    // Copy existing request headers to preserve cookies/auth
                     request.requestHeaders?.forEach { (key, value) -> headers[key] = value }
-                    // Override with desktop user agent
                     headers["User-Agent"] = DESKTOP_USER_AGENT
                     view.loadUrl(request.url.toString(), headers)
                     return true
@@ -223,7 +281,7 @@ fun BrowserContent(ime: LatinIME) {
                         hint = context.getString(R.string.browser_url_hint)
                         setSingleLine(true)
                         imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_GO
-                        background = null // Remove underline
+                        background = null
                         layoutParams = android.view.ViewGroup.LayoutParams(
                             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                             android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -242,7 +300,6 @@ fun BrowserContent(ime: LatinIME) {
                             }
                             override fun afterTextChanged(s: android.text.Editable?) {}
                         })
-                        // When this EditText gets focus, tell the IME about it
                         setOnFocusChangeListener { v, hasFocus ->
                             if (hasFocus) {
                                 ime.setDialogEditText(v as android.widget.EditText)
@@ -259,12 +316,75 @@ fun BrowserContent(ime: LatinIME) {
                 }
             )
 
+            // Bookmark button - tap to toggle bookmark, long-press to show bookmark list
+            Box(
+                modifier = Modifier
+                    .combinedClickable(
+                        onClick = {
+                            val added = toggleBookmark(ime, pageTitle, urlInput)
+                            bookmarks = loadBookmarks(ime)
+                            if (added) {
+                                android.widget.Toast.makeText(context, R.string.browser_bookmark_save, android.widget.Toast.LENGTH_SHORT).show()
+                            } else {
+                                android.widget.Toast.makeText(context, R.string.browser_bookmark_remove, android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onLongClick = { showBookmarks = !showBookmarks }
+                    )
+                    .size(48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                val isBm = bookmarks.any { it.url == urlInput }
+                Icon(
+                    painter = painterResource(R.drawable.ic_link),
+                    contentDescription = stringResource(R.string.browser_bookmark),
+                    modifier = Modifier.size(24.dp),
+                    tint = if (isBm) Color(0xFFFFC107) else MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // Zoom out
+            IconButton(onClick = { webView.zoomOut() }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_minus),
+                    contentDescription = stringResource(R.string.browser_zoom_out),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // Zoom in
+            IconButton(onClick = { webView.zoomIn() }) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_plus),
+                    contentDescription = stringResource(R.string.browser_zoom_in),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
             IconButton(onClick = { ime.getActiveDialog()?.dismiss() }) {
                 Icon(
                     painter = painterResource(R.drawable.ic_close_rounded),
                     contentDescription = stringResource(R.string.browser_minimize)
                 )
             }
+        }
+
+        // Bookmark list panel (shown when toggled)
+        if (showBookmarks) {
+            BookmarkListPanel(
+                bookmarks = bookmarks,
+                currentUrl = urlInput,
+                onLoadUrl = { url ->
+                    webView.loadUrl(url, mapOf("User-Agent" to DESKTOP_USER_AGENT))
+                    showBookmarks = false
+                },
+                onDelete = { url ->
+                    val list = loadBookmarks(ime).toMutableList()
+                    list.removeAll { it.url == url }
+                    saveBookmarks(ime, list)
+                    bookmarks = list
+                }
+            )
         }
 
         // WebView area
@@ -276,12 +396,9 @@ fun BrowserContent(ime: LatinIME) {
                     isFocusableInTouchMode = true
                     setOnFocusChangeListener { _, hasFocus ->
                         if (hasFocus) {
-                            // When WebView has focus, clear specific EditText tracking
-                            // so LatinIME.getCurrentInputConnection() redirection takes over
                             ime.setDialogEditText(null)
                         }
                     }
-                    // Ensure touch requests focus
                     setOnTouchListener { v, _ ->
                         v.requestFocus()
                         false
@@ -291,5 +408,78 @@ fun BrowserContent(ime: LatinIME) {
             },
             modifier = Modifier.weight(1f).fillMaxWidth()
         )
+    }
+}
+
+@Composable
+private fun BookmarkListPanel(
+    bookmarks: List<Bookmark>,
+    currentUrl: String,
+    onLoadUrl: (String) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 200.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 4.dp
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Text(
+                text = "Bookmarks",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            if (bookmarks.isEmpty()) {
+                Text(
+                    text = "No bookmarks yet",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(8.dp)
+                )
+            } else {
+                LazyColumn {
+                    itemsIndexed(bookmarks) { _, bookmark ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onLoadUrl(bookmark.url) }
+                                .padding(vertical = 6.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val isActive = bookmark.url == currentUrl
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = bookmark.title.ifEmpty { bookmark.url },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = bookmark.url,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = Color.Gray
+                                )
+                            }
+                            IconButton(
+                                onClick = { onDelete(bookmark.url) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_close_rounded),
+                                    contentDescription = "Delete",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color.Gray
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
