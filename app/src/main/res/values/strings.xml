@@ -489,6 +489,7 @@
     <string name="browser_bookmark_save">Bookmark page</string>
     <string name="browser_bookmark_remove">Remove bookmark</string>
     <string name="browser_bookmarks">Bookmarks</string>
+    <string name="browser_no_bookmarks">No bookmarks yet</string>
     <string name="browser_zoom_in">Zoom in</string>
     <string name="browser_zoom_out">Zoom out</string>
     <string name="ai_slot_unconfigured">Long-press to assign a model</string>

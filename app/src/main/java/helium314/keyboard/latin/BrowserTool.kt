@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -427,13 +428,13 @@ private fun BookmarkListPanel(
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
             Text(
-                text = "Bookmarks",
+                text = stringResource(R.string.browser_bookmarks),
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
             if (bookmarks.isEmpty()) {
                 Text(
-                    text = "No bookmarks yet",
+                    text = stringResource(R.string.browser_no_bookmarks),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray,
                     modifier = Modifier.padding(8.dp)
@@ -471,7 +472,7 @@ private fun BookmarkListPanel(
                             ) {
                                 Icon(
                                     painter = painterResource(R.drawable.ic_close_rounded),
-                                    contentDescription = "Delete",
+                                    contentDescription = stringResource(R.string.delete),
                                     modifier = Modifier.size(16.dp),
                                     tint = Color.Gray
                                 )
