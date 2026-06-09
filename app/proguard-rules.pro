@@ -17,3 +17,7 @@
 -dontwarn com.google.errorprone.annotations.**
 -dontwarn javax.annotation.**
 -dontwarn javax.annotation.concurrent.**
+
+# ML Kit Text Recognition
+-keep class com.google.mlkit.** { *; }
+-dontwarn com.google.mlkit.**

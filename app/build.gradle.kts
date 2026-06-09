@@ -178,6 +178,9 @@ dependencies {
     // onnx runtime for on-device AI
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.3")
 
+    // ML Kit Text Recognition for OCR (on-device, downloads model on first use)
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+
     // test
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")

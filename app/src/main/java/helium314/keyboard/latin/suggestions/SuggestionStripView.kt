@@ -417,6 +417,11 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
                 (listener as? helium314.keyboard.latin.LatinIME)?.showBrowserTool()
                 return
             }
+            // OCR Screenshot: scan latest screenshot for text and copy to clipboard
+            if (tag == ToolbarKey.OCR_SCREENSHOT) {
+                helium314.keyboard.latin.utils.OcrScreenshotHandler.scanLatestScreenshot(context)
+                return
+            }
             val code = getCodeForToolbarKey(tag)
             if (code != KeyCode.UNSPECIFIED) {
                 Log.d(TAG, "click toolbar key $tag")

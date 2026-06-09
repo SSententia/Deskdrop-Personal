@@ -109,6 +109,7 @@ object KeyCode {
     const val BROWSER =                     -313
     const val FLOATING_NOTE =               -314
     const val CALCULATOR =                  -315
+    const val OCR_SCREENSHOT =              -316
 
     const val CURRENCY_SLOT_1 =             -801
     const val CURRENCY_SLOT_2 =             -802
@@ -216,7 +217,7 @@ object KeyCode {
         MEDIA_PREVIOUS, VOL_UP, VOL_DOWN, MUTE, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12, BACK,
         TIMESTAMP, CTRL_LEFT, CTRL_RIGHT, ALT_LEFT, ALT_RIGHT, META_LEFT, META_RIGHT, SEND_INTENT_ONE, SEND_INTENT_TWO,
         SEND_INTENT_THREE, EMOJI_SEARCH, INLINE_EMOJI_SEARCH_DONE, META_LOCK,
-        AI_ASSIST, AI_SLOT_1, AI_SLOT_2, AI_SLOT_3, AI_SLOT_4, AI_CLIPBOARD, BROWSER, FLOATING_NOTE, CALCULATOR
+        AI_ASSIST, AI_SLOT_1, AI_SLOT_2, AI_SLOT_3, AI_SLOT_4, AI_CLIPBOARD, BROWSER, FLOATING_NOTE, CALCULATOR, OCR_SCREENSHOT
         -> this
 
         // conversion

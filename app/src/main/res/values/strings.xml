@@ -479,6 +479,12 @@
     <string name="ai_tone" tools:keep="@string/ai_tone">AI Tone</string>
     <string name="browser" tools:keep="@string/browser">Browser</string>
     <string name="floating_note" tools:keep="@string/floating_note">Floating Note</string>
+    <string name="ocr_screenshot" tools:keep="@string/ocr_screenshot">OCR Scan</string>
+    <string name="ocr_no_permission">Storage permission needed to scan screenshots</string>
+    <string name="ocr_no_screenshot">No recent screenshot found</string>
+    <string name="ocr_no_text_found">No text found in screenshot</string>
+    <string name="ocr_success">%d characters copied to clipboard</string>
+    <string name="ocr_clipboard_error">Could not access clipboard</string>
     <string name="browser_url_hint">Enter URL</string>
     <string name="browser_back">Back</string>
     <string name="browser_forward">Forward</string>

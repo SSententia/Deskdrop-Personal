@@ -220,6 +220,7 @@ fun getCodeForToolbarKey(key: ToolbarKey) = Settings.getInstance().getCustomTool
     BROWSER -> KeyCode.BROWSER
     FLOATING_NOTE -> KeyCode.FLOATING_NOTE
     CALCULATOR -> KeyCode.CALCULATOR
+    OCR_SCREENSHOT -> KeyCode.OCR_SCREENSHOT
 }
 
 fun getCodeForToolbarKeyLongClick(key: ToolbarKey) = Settings.getInstance().getCustomToolbarLongpressCode(key) ?: when (key) {
@@ -258,7 +259,8 @@ enum class ToolbarKey {
     AI_TONE,
     BROWSER,
     FLOATING_NOTE,
-    CALCULATOR
+    CALCULATOR,
+    OCR_SCREENSHOT
 }
 
 enum class ToolbarMode {
@@ -268,13 +270,13 @@ enum class ToolbarMode {
 val toolbarKeyStrings = entries.associateWithTo(EnumMap(ToolbarKey::class.java)) { it.toString().lowercase(Locale.US) }
 
 val defaultToolbarPref by lazy {
-    val default = listOf(AI_ASSIST, AI_TONE, AI_VOICE, SETTINGS, VOICE, CLIPBOARD, BROWSER, CALCULATOR, UNDO, REDO, SELECT_WORD, COPY, PASTE, LEFT, RIGHT)
+    val default = listOf(AI_ASSIST, AI_TONE, AI_VOICE, SETTINGS, VOICE, CLIPBOARD, BROWSER, CALCULATOR, OCR_SCREENSHOT, UNDO, REDO, SELECT_WORD, COPY, PASTE, LEFT, RIGHT)
     val others = entries.filterNot { it in default || it == CLOSE_HISTORY }
     default.joinToString(Separators.ENTRY) { it.name + Separators.KV + true } + Separators.ENTRY +
             others.joinToString(Separators.ENTRY) { it.name + Separators.KV + false }
 }
 
-private val defaultPinnedKeys = setOf(AI_ASSIST, AI_TONE, AI_CLIPBOARD, AI_SLOT_1, AI_SLOT_2, AI_VOICE, AI_CONVERSATION)
+private val defaultPinnedKeys = setOf(AI_ASSIST, AI_TONE, AI_CLIPBOARD, AI_SLOT_1, AI_SLOT_2, AI_VOICE, AI_CONVERSATION, OCR_SCREENSHOT)
 val defaultPinnedToolbarPref = entries.filterNot { it == CLOSE_HISTORY }.joinToString(Separators.ENTRY) {
     it.name + Separators.KV + (it in defaultPinnedKeys)
 }

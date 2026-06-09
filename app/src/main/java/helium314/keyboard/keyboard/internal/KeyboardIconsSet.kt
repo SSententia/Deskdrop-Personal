@@ -167,6 +167,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.BROWSER -> R.drawable.ic_link
                     ToolbarKey.FLOATING_NOTE -> R.drawable.ic_edit
                     ToolbarKey.CALCULATOR -> R.drawable.ic_calculator
+                    ToolbarKey.OCR_SCREENSHOT -> R.drawable.ic_ocr_screenshot
                 })
             }
         } }
@@ -241,6 +242,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.BROWSER -> R.drawable.ic_link
                     ToolbarKey.FLOATING_NOTE -> R.drawable.ic_edit
                     ToolbarKey.CALCULATOR -> R.drawable.ic_calculator
+                    ToolbarKey.OCR_SCREENSHOT -> R.drawable.ic_ocr_screenshot
                 })
             }
         } }
@@ -315,6 +317,7 @@ class KeyboardIconsSet private constructor() {
                     ToolbarKey.BROWSER -> R.drawable.ic_link
                     ToolbarKey.FLOATING_NOTE -> R.drawable.ic_edit
                     ToolbarKey.CALCULATOR -> R.drawable.ic_calculator
+                    ToolbarKey.OCR_SCREENSHOT -> R.drawable.ic_ocr_screenshot
                 })
             }
         } }

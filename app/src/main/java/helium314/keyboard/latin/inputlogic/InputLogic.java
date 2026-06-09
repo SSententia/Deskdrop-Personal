@@ -890,6 +890,9 @@ public final class InputLogic {
             case KeyCode.FLOATING_NOTE:
                 mLatinIME.showFloatingNoteConfigDialog();
                 break;
+            case KeyCode.OCR_SCREENSHOT:
+                helium314.keyboard.latin.utils.OcrScreenshotHandler.scanLatestScreenshot(mLatinIME);
+                break;
             case KeyCode.LANGUAGE_SWITCH:
                 handleLanguageSwitchKey();
                 break;
