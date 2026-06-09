@@ -17,7 +17,8 @@ class FloatingNoteTool : AiTool {
 
     override val description =
         "Spawn a persistent floating text note window on the screen. " +
-        "Position, scale, spawning delay, and optional camouflage behavior are configurable."
+        "Position, scale, spawning delay, and optional camouflage behavior are configurable. " +
+        "Notes can be saved and loaded. Images can be attached via gallery picker."
 
     override val gate = ToolGate.ACTIONS
 
@@ -52,6 +53,10 @@ class FloatingNoteTool : AiTool {
                 put("type", "integer")
                 put("description", "Duration in milliseconds after which the note becomes transparent (camouflage) until clicked again (default 0 / disabled).")
             })
+            put("noteId", JSONObject().apply {
+                put("type", "string")
+                put("description", "Optional ID of a previously saved note to load. If omitted, a new empty note is created.")
+            })
         })
     }
 
@@ -63,10 +68,21 @@ class FloatingNoteTool : AiTool {
         val height = args.optInt("height", 200)
         val delayMs = args.optInt("delayMs", args.optInt("delay_ms", 0))
         val camouflageDurationMs = args.optInt("camouflageDurationMs", args.optInt("camouflage_duration_ms", 0))
+        val noteId = args.optString("noteId", "")
+
+        // If noteId is provided, load the saved note's content
+        var resolvedText = text
+        if (noteId.isNotEmpty() && text.isEmpty()) {
+            val savedNotes = helium314.keyboard.latin.ai.NoteStorage.loadAllNotes(ctx.appContext)
+            val savedNote = savedNotes.firstOrNull { it.id == noteId }
+            if (savedNote != null) {
+                resolvedText = savedNote.content
+            }
+        }
 
         return try {
             val intent = Intent(ctx.appContext, FloatingNoteService::class.java).apply {
-                putExtra("text", text)
+                putExtra("text", resolvedText)
                 putExtra("x", x)
                 putExtra("y", y)
                 putExtra("width", width)

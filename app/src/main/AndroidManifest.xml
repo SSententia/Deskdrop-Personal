@@ -190,6 +190,14 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
             android:taskAffinity=""
             android:exported="false" />
 
+        <activity
+            android:name="helium314.keyboard.latin.ai.NoteImagePickerActivity"
+            android:theme="@style/TransparentActivityTheme"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:exported="false" />
+
         <!-- Voice settings dialog (launched from widget) -->
         <activity
             android:name="helium314.keyboard.latin.ai.ExecuteSettingsActivity"

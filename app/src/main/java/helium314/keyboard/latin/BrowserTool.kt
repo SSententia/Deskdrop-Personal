@@ -25,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import helium314.keyboard.latin.utils.DeviceProtectedUtils
 import helium314.keyboard.latin.utils.showImeComposeDialog
@@ -269,13 +270,6 @@ fun BrowserContent(ime: LatinIME) {
                     tint = if (canGoForward) MaterialTheme.colorScheme.primary else Color.Gray
                 )
             }
-            IconButton(onClick = { webView.reload() }) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_redo_rounded),
-                    contentDescription = stringResource(R.string.browser_refresh)
-                )
-            }
-
             AndroidView(
                 factory = { ctx ->
                     android.widget.EditText(ctx).apply {
@@ -344,22 +338,36 @@ fun BrowserContent(ime: LatinIME) {
                 )
             }
 
-            // Zoom out
-            IconButton(onClick = { webView.zoomOut() }) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_minus),
-                    contentDescription = stringResource(R.string.browser_zoom_out),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            // Zoom in
-            IconButton(onClick = { webView.zoomIn() }) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_plus),
-                    contentDescription = stringResource(R.string.browser_zoom_in),
-                    tint = MaterialTheme.colorScheme.primary
-                )
+            // Menu with refresh + zoom controls
+            Box {
+                var browserMenuExpanded by remember { mutableStateOf(false) }
+                IconButton(onClick = { browserMenuExpanded = true }) {
+                    Text(
+                        text = "\u22EE",
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                DropdownMenu(
+                    expanded = browserMenuExpanded,
+                    onDismissRequest = { browserMenuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.browser_refresh)) },
+                        onClick = { webView.reload(); browserMenuExpanded = false },
+                        leadingIcon = { Icon(painterResource(R.drawable.ic_redo_rounded), contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.browser_zoom_in)) },
+                        onClick = { webView.zoomIn(); browserMenuExpanded = false },
+                        leadingIcon = { Icon(painterResource(R.drawable.ic_plus), contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.browser_zoom_out)) },
+                        onClick = { webView.zoomOut(); browserMenuExpanded = false },
+                        leadingIcon = { Icon(painterResource(R.drawable.ic_minus), contentDescription = null) }
+                    )
+                }
             }
 
             IconButton(onClick = { ime.getActiveDialog()?.dismiss() }) {

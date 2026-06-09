@@ -50,6 +50,18 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import helium314.keyboard.latin.LatinIME
 import helium314.keyboard.latin.R
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 
 class FloatingNoteService : Service() {
 
@@ -57,6 +69,9 @@ class FloatingNoteService : Service() {
         private const val CHANNEL_ID = "deskdrop_floating_note"
         private const val NOTIFICATION_ID = 9002
         private const val TAG = "FloatingNoteService"
+
+        // Callback for image attachment from NoteImagePickerActivity
+        var imageAttachCallback: ((String) -> Unit)? = null
     }
 
     private var wm: WindowManager? = null
@@ -90,6 +105,15 @@ class FloatingNoteService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Handle image attachment from NoteImagePickerActivity
+        if (intent?.action == "ATTACH_IMAGE") {
+            val imageUri = intent.getStringExtra("imageUri")
+            if (imageUri != null) {
+                mainHandler.post { imageAttachCallback?.invoke(imageUri) }
+            }
+            return START_NOT_STICKY
+        }
+
         val text = intent?.getStringExtra("text") ?: ""
         val x = intent?.getIntExtra("x", 100) ?: 100
         val y = intent?.getIntExtra("y", 200) ?: 200
@@ -211,17 +235,52 @@ class FloatingNoteService : Service() {
                 var browserWebViewRef by remember { mutableStateOf<android.webkit.WebView?>(null) }
                 val desktopUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
-                // Camouflage timer logic
+                // Note persistence state
+                var showMenu by remember { mutableStateOf(false) }
+                var currentNoteId by remember { mutableStateOf<String?>(null) }
+                var savedNotes by remember { mutableStateOf(NoteStorage.loadAllNotes(this@FloatingNoteService)) }
+                var showSavedNotes by remember { mutableStateOf(false) }
+
+                // Image attachment state
+                var attachedImages by remember { mutableStateOf(listOf<Triple<String, String, String>>()) } // uri, label, id
+                var showImageLabelDialog by remember { mutableStateOf(false) }
+                var pendingImageUri by remember { mutableStateOf<String?>(null) }
+                var imageLabelText by remember { mutableStateOf("") }
+
+                // Image viewer state
+                var showImageViewer by remember { mutableStateOf(false) }
+                var viewerImageUri by remember { mutableStateOf<String?>(null) }
+                var viewerImageLabel by remember { mutableStateOf("") }
+
+                // Floating keyboard fallback state
+                var showFallbackKeyboard by remember { mutableStateOf(false) }
+
+                // Register image attachment callback from NoteImagePickerActivity
+                DisposableEffect(Unit) {
+                    imageAttachCallback = { uri ->
+                        pendingImageUri = uri
+                        showImageLabelDialog = true
+                        imageLabelText = ""
+                    }
+                    onDispose { imageAttachCallback = null }
+                }
+
+                // Camouflage: only clear when user starts editing.
+                // Timer is started by the ✓ confirmation button click only.
                 LaunchedEffect(isEditing) {
+                    if (isEditing && isCamouflaged) {
+                        isCamouflaged = false
+                        camouflageRunnable?.let { camouflageHandler.removeCallbacks(it) }
+                    }
+                }
+
+                // Helper to start camouflage timer (called from ✓ button)
+                val startCamouflageTimer: () -> Unit = {
                     if (camouflageDurationMs > 0) {
                         camouflageRunnable?.let { camouflageHandler.removeCallbacks(it) }
-                        if (!isEditing) {
-                            val run = Runnable { isCamouflaged = true }
-                            camouflageRunnable = run
-                            camouflageHandler.postDelayed(run, camouflageDurationMs.toLong())
-                        } else {
-                            isCamouflaged = false
-                        }
+                        val run = Runnable { isCamouflaged = true }
+                        camouflageRunnable = run
+                        camouflageHandler.postDelayed(run, camouflageDurationMs.toLong())
                     }
                 }
 
@@ -250,6 +309,7 @@ class FloatingNoteService : Service() {
                         .clickable {
                             if (isCamouflaged) {
                                 isCamouflaged = false
+                                camouflageRunnable?.let { camouflageHandler.removeCallbacks(it) }
                             }
                         },
                     shape = RoundedCornerShape(16.dp),
@@ -288,7 +348,108 @@ class FloatingNoteService : Service() {
                                         .background(Color(0x66FFFFFF), RoundedCornerShape(2.dp))
                                 )
 
-                                Spacer(modifier = Modifier.weight(1f))                                                // Done/checkmark button — shown when the EditText has focus
+                                Spacer(modifier = Modifier.weight(1f))
+
+                                // Note menu button (visible when not in browser mode)
+                                if (!isBrowserMode) {
+                                    Box {
+                                        IconButton(
+                                            onClick = { showMenu = true },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Text(
+                                                text = "\u22EE",
+                                                color = Color.White,
+                                                fontSize = 14.sp
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = showMenu,
+                                            onDismissRequest = { showMenu = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("Save Note") },
+                                                onClick = {
+                                                    showMenu = false
+                                                    val noteText = editTextRef?.text?.toString() ?: ""
+                                                    val title = noteText.take(50).lines().firstOrNull()?.trim() ?: "Untitled"
+                                                    val note = SavedNote(
+                                                        id = currentNoteId ?: java.util.UUID.randomUUID().toString(),
+                                                        title = title.ifEmpty { "Untitled" },
+                                                        content = noteText,
+                                                        images = attachedImages.map { NoteImage(uri = it.first, label = it.second) }
+                                                    )
+                                                    NoteStorage.saveNote(this@FloatingNoteService, note)
+                                                    currentNoteId = note.id
+                                                    savedNotes = NoteStorage.loadAllNotes(this@FloatingNoteService)
+                                                    Toast.makeText(this@FloatingNoteService, "Note saved", Toast.LENGTH_SHORT).show()
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("New Note") },
+                                                onClick = {
+                                                    showMenu = false
+                                                    // Auto-save current if it has content
+                                                    val noteText = editTextRef?.text?.toString() ?: ""
+                                                    if (noteText.isNotBlank() || attachedImages.isNotEmpty()) {
+                                                        val title = noteText.take(50).lines().firstOrNull()?.trim() ?: "Untitled"
+                                                        val note = SavedNote(
+                                                            id = currentNoteId ?: java.util.UUID.randomUUID().toString(),
+                                                            title = title.ifEmpty { "Untitled" },
+                                                            content = noteText,
+                                                            images = attachedImages.map { NoteImage(uri = it.first, label = it.second) }
+                                                        )
+                                                        NoteStorage.saveNote(this@FloatingNoteService, note)
+                                                    }
+                                                    currentNoteId = null
+                                                    editTextRef?.setText("")
+                                                    attachedImages = emptyList()
+                                                    savedNotes = NoteStorage.loadAllNotes(this@FloatingNoteService)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Load Notes") },
+                                                onClick = {
+                                                    showMenu = false
+                                                    savedNotes = NoteStorage.loadAllNotes(this@FloatingNoteService)
+                                                    showSavedNotes = true
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Attach Image") },
+                                                onClick = {
+                                                    showMenu = false
+                                                    val intent = Intent(this@FloatingNoteService, NoteImagePickerActivity::class.java)
+                                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                    startActivity(intent)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Floating keyboard toggle (when editing)
+                                if (isEditing) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .clickable { showFallbackKeyboard = !showFallbackKeyboard }
+                                            .background(
+                                                if (showFallbackKeyboard) Color(0xFFFF9800) else Color(0xFF666666),
+                                                CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "\u2328",
+                                            color = Color.White,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+
+                                // Done/checkmark button — shown when the EditText has focus
                                                 if (isEditing) {
                                                     Box(
                                                         modifier = Modifier
@@ -302,6 +463,22 @@ class FloatingNoteService : Service() {
                                                                 ime?.requestHideSelf(0)
                                                                 isEditingState.value = false
                                                                 isEditingActive = false
+                                                                // 3. Auto-save the note
+                                                                val noteText = editTextRef?.text?.toString() ?: ""
+                                                                if (noteText.isNotBlank()) {
+                                                                    val title = noteText.take(50).lines().firstOrNull()?.trim() ?: "Untitled"
+                                                                    val note = SavedNote(
+                                                                        id = currentNoteId ?: java.util.UUID.randomUUID().toString(),
+                                                                        title = title.ifEmpty { "Untitled" },
+                                                                        content = noteText,
+                                                                        images = attachedImages.map { NoteImage(uri = it.first, label = it.second) }
+                                                                    )
+                                                                    NoteStorage.saveNote(this@FloatingNoteService, note)
+                                                                    currentNoteId = note.id
+                                                                    savedNotes = NoteStorage.loadAllNotes(this@FloatingNoteService)
+                                                                }
+                                                                // 4. Start camouflage timer (only on explicit confirmation)
+                                                                startCamouflageTimer()
                                                             }
                                             .background(Color(0xFF4CAF50), CircleShape),
                                         contentAlignment = Alignment.Center
@@ -375,6 +552,48 @@ class FloatingNoteService : Service() {
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold
                                     )
+                                }
+                            }
+
+                            // Attached image chips (shown in note mode only)
+                            if (!isBrowserMode && attachedImages.isNotEmpty()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    attachedImages.forEach { (uri, label, id) ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    viewerImageUri = uri
+                                                    viewerImageLabel = label
+                                                    showImageViewer = true
+                                                }
+                                                .padding(vertical = 2.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "\uD83D\uDDBC $label",
+                                                color = Color(0xFF64B5F6),
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(18.dp)
+                                                    .clickable {
+                                                        attachedImages = attachedImages.filter { it.third != id }
+                                                    }
+                                                    .background(Color(0xFF555555), CircleShape),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text("\u2715", color = Color.White, fontSize = 8.sp)
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -620,6 +839,408 @@ class FloatingNoteService : Service() {
                                 }
                             }
                         }
+                        // Saved Notes List overlay
+                        if (showSavedNotes) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color(0x80000000))
+                                    .clickable { showSavedNotes = false },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Card(
+                                    modifier = Modifier.widthIn(min = 240.dp, max = 300.dp).heightIn(max = 400.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A)),
+                                    border = BorderStroke(1.dp, Color(0x33FFFFFF))
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        Text(
+                                            text = "Saved Notes",
+                                            color = Color.White,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(bottom = 8.dp)
+                                        )
+                                        if (savedNotes.isEmpty()) {
+                                            Text(
+                                                text = "No saved notes yet.",
+                                                color = Color(0xAAFFFFFF),
+                                                fontSize = 13.sp
+                                            )
+                                        } else {
+                                            Column(modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                                                savedNotes.forEach { note ->
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clickable {
+                                                                currentNoteId = note.id
+                                                                editTextRef?.setText(note.content)
+                                                                attachedImages = note.images.map {
+                                                                    Triple(it.uri, it.label, java.util.UUID.randomUUID().toString())
+                                                                }
+                                                                showSavedNotes = false
+                                                            }
+                                                            .padding(vertical = 6.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = note.title.ifEmpty { "Untitled" },
+                                                                color = Color.White,
+                                                                fontSize = 14.sp,
+                                                                maxLines = 1
+                                                            )
+                                                            Text(
+                                                                text = note.content.take(60).replace("\n", " "),
+                                                                color = Color(0x88FFFFFF),
+                                                                fontSize = 11.sp,
+                                                                maxLines = 1
+                                                            )
+                                                        }
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(20.dp)
+                                                                .clickable {
+                                                                    NoteStorage.deleteNote(this@FloatingNoteService, note.id)
+                                                                    savedNotes = NoteStorage.loadAllNotes(this@FloatingNoteService)
+                                                                }
+                                                                .background(Color(0xFFE53935), CircleShape),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Text("\u2715", color = Color.White, fontSize = 10.sp)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { showSavedNotes = false }
+                                                .background(Color(0xFF555555), RoundedCornerShape(8.dp))
+                                                .padding(vertical = 8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("Close", color = Color.White, fontSize = 14.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Image Label Dialog overlay
+                        if (showImageLabelDialog && pendingImageUri != null) {
+                            var labelInputRef by remember { mutableStateOf<EditText?>(null) }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color(0x80000000))
+                                    .clickable { /* block clicks */ },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Card(
+                                    modifier = Modifier.widthIn(min = 220.dp, max = 280.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2A2A)),
+                                    border = BorderStroke(1.dp, Color(0x33FFFFFF))
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(20.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = "Image Label",
+                                            color = Color.White,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        AndroidView(
+                                            factory = { ctx ->
+                                                EditText(ctx).apply {
+                                                    labelInputRef = this
+                                                    hint = "Enter label text..."
+                                                    setHintTextColor(android.graphics.Color.argb(128, 128, 128, 128))
+                                                    background = null
+                                                    setTextColor(android.graphics.Color.WHITE)
+                                                    textSize = 14f
+                                                    setSingleLine(true)
+                                                    setPadding(16, 12, 16, 12)
+                                                    setOnFocusChangeListener { v, hasFocus ->
+                                                        if (hasFocus) {
+                                                            val ime = LatinIME.getInstance()
+                                                            ime?.setDialogEditText(v as EditText)
+                                                        }
+                                                    }
+                                                    addTextChangedListener(object : android.text.TextWatcher {
+                                                        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                                                        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                                                            imageLabelText = s?.toString() ?: ""
+                                                        }
+                                                        override fun afterTextChanged(s: android.text.Editable?) {}
+                                                    })
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceEvenly
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clickable {
+                                                        labelInputRef?.let { LatinIME.getInstance()?.setDialogEditText(null) }
+                                                        showImageLabelDialog = false
+                                                        pendingImageUri = null
+                                                    }
+                                                    .background(Color(0xFF555555), RoundedCornerShape(8.dp))
+                                                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text("Cancel", color = Color.White, fontSize = 14.sp)
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .clickable {
+                                                        labelInputRef?.let { LatinIME.getInstance()?.setDialogEditText(null) }
+                                                        val id = java.util.UUID.randomUUID().toString()
+                                                        attachedImages = attachedImages + Triple(
+                                                            pendingImageUri!!,
+                                                            imageLabelText.ifEmpty { "Image" },
+                                                            id
+                                                        )
+                                                        showImageLabelDialog = false
+                                                        pendingImageUri = null
+                                                    }
+                                                    .background(Color(0xFF4CAF50), RoundedCornerShape(8.dp))
+                                                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text("Attach", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Image Viewer overlay
+                        if (showImageViewer && viewerImageUri != null) {
+                            val context = LocalContext.current
+                            var imgScale by remember { mutableStateOf(1f) }
+                            var imgOffsetX by remember { mutableStateOf(0f) }
+                            var imgOffsetY by remember { mutableStateOf(0f) }
+                            val bitmap = remember(viewerImageUri) {
+                                try {
+                                    val uri = Uri.parse(viewerImageUri!!)
+                                    context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                                } catch (_: Exception) { null }
+                            }
+                            Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                                if (bitmap != null) {
+                                    Image(
+                                        bitmap = bitmap.asImageBitmap(),
+                                        contentDescription = viewerImageLabel,
+                                        contentScale = ContentScale.Fit,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .graphicsLayer(
+                                                scaleX = imgScale,
+                                                scaleY = imgScale,
+                                                translationX = imgOffsetX,
+                                                translationY = imgOffsetY
+                                            )
+                                            .pointerInput(Unit) {
+                                                detectTransformGestures { _, pan, zoom, _ ->
+                                                    imgScale = (imgScale * zoom).coerceIn(0.5f, 5f)
+                                                    imgOffsetX += pan.x
+                                                    imgOffsetY += pan.y
+                                                }
+                                            }
+                                    )
+                                } else {
+                                    Text(
+                                        text = "Failed to load image",
+                                        color = Color.Gray,
+                                        modifier = Modifier.align(Alignment.Center)
+                                    )
+                                }
+                                // Top bar with close + zoom controls
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0xCC000000))
+                                        .padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clickable { showImageViewer = false; viewerImageUri = null }
+                                            .background(Color(0xFF555555), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("\u2715", color = Color.White, fontSize = 14.sp)
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = viewerImageLabel,
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clickable { imgScale = (imgScale / 1.3f).coerceAtLeast(0.5f) }
+                                            .background(Color(0xFF555555), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("\u2212", color = Color.White, fontSize = 18.sp)
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clickable { imgScale = 1f; imgOffsetX = 0f; imgOffsetY = 0f }
+                                            .background(Color(0xFF555555), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("1:1", color = Color.White, fontSize = 10.sp)
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clickable { imgScale = (imgScale * 1.3f).coerceAtMost(5f) }
+                                            .background(Color(0xFF555555), CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("+", color = Color.White, fontSize = 18.sp)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Floating Keyboard fallback
+                        if (showFallbackKeyboard && !isBrowserMode) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                            ) {
+                                val kbRows = listOf("QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM")
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0xE62A2A2A))
+                                        .padding(4.dp)
+                                ) {
+                                    kbRows.forEach { row ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            row.forEach { char ->
+                                                Box(
+                                                    modifier = Modifier
+                                                        .padding(2.dp)
+                                                        .defaultMinSize(minWidth = 30.dp)
+                                                        .height(36.dp)
+                                                        .background(Color(0xFF444444), RoundedCornerShape(4.dp))
+                                                        .clickable {
+                                                            editTextRef?.let { et ->
+                                                                val start = et.selectionStart.coerceAtLeast(0)
+                                                                et.text.insert(start, char.toString())
+                                                            }
+                                                        },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = char.toString(),
+                                                        color = Color.White,
+                                                        fontSize = 14.sp,
+                                                        modifier = Modifier.padding(horizontal = 6.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                    // Bottom row: dismiss, space, backspace, enter
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(2.dp)
+                                                .width(44.dp)
+                                                .height(36.dp)
+                                                .background(Color(0xFF666666), RoundedCornerShape(4.dp))
+                                                .clickable { showFallbackKeyboard = false },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("\u2328", color = Color.White, fontSize = 14.sp)
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(2.dp)
+                                                .weight(1f)
+                                                .height(36.dp)
+                                                .background(Color(0xFF444444), RoundedCornerShape(4.dp))
+                                                .clickable {
+                                                    editTextRef?.let { et ->
+                                                        val start = et.selectionStart.coerceAtLeast(0)
+                                                        et.text.insert(start, " ")
+                                                    }
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("Space", color = Color.White, fontSize = 12.sp)
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(2.dp)
+                                                .width(44.dp)
+                                                .height(36.dp)
+                                                .background(Color(0xFF555555), RoundedCornerShape(4.dp))
+                                                .clickable {
+                                                    editTextRef?.let { et ->
+                                                        val start = et.selectionStart
+                                                        if (start > 0) et.text.delete(start - 1, start)
+                                                    }
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("\u232B", color = Color.White, fontSize = 16.sp)
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(2.dp)
+                                                .width(44.dp)
+                                                .height(36.dp)
+                                                .background(Color(0xFF4CAF50), RoundedCornerShape(4.dp))
+                                                .clickable {
+                                                    editTextRef?.let { et ->
+                                                        val start = et.selectionStart.coerceAtLeast(0)
+                                                        et.text.insert(start, "\n")
+                                                    }
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("\u23CE", color = Color.White, fontSize = 16.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     } // Box closes
                 } // Card closes
             } // setContent closes
@@ -725,6 +1346,7 @@ class FloatingNoteService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        imageAttachCallback = null // Prevent static lambda leak
         removeFloatingNote()
     }
 
