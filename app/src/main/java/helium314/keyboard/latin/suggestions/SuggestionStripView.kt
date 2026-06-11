@@ -497,6 +497,26 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             (listener as? helium314.keyboard.latin.LatinIME)?.showFloatingNoteConfigDialog()
             return
         }
+        // OCR Screenshot: long-press opens crop UI for the latest screenshot
+        if (tag == ToolbarKey.OCR_SCREENSHOT) {
+            val candidate = helium314.keyboard.latin.ai.AiServiceSync.findLatestImageCandidate(context)
+            if (candidate == null) {
+                android.widget.Toast.makeText(context, R.string.ocr_no_screenshot, android.widget.Toast.LENGTH_SHORT).show()
+                return
+            }
+            try {
+                val intent = android.content.Intent(context, helium314.keyboard.latin.utils.CropTrampolineActivity::class.java).apply {
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    putExtra(helium314.keyboard.latin.utils.CropTrampolineActivity.EXTRA_IMAGE_URI, candidate.uriString)
+                    putExtra(helium314.keyboard.latin.utils.CropTrampolineActivity.EXTRA_IMAGE_MIME, candidate.mimeType)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Failed to launch crop activity", e)
+                android.widget.Toast.makeText(context, R.string.ocr_crop_failed, android.widget.Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
         if (!Settings.getValues().mQuickPinToolbarKeys || view.parent === pinnedKeys) {
             val longClickCode = getCodeForToolbarKeyLongClick(tag)
             if (longClickCode != KeyCode.UNSPECIFIED) {

@@ -27,10 +27,90 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import helium314.keyboard.latin.ai.AiServiceSync
 import helium314.keyboard.latin.utils.DeviceProtectedUtils
 import helium314.keyboard.latin.utils.showImeComposeDialog
 import org.json.JSONArray
 import org.json.JSONObject
+
+/** Shared core: finds the latest screenshot, checks permission, returns the content URI or null. */
+private fun getLatestScreenshotUri(context: android.content.Context, onPermissionError: () -> Unit): android.net.Uri? {
+    val candidate = AiServiceSync.findLatestImageCandidate(context)
+    if (candidate == null) {
+        val hasPerm = if (android.os.Build.VERSION.SDK_INT >= 34) {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else if (android.os.Build.VERSION.SDK_INT >= 33) {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (hasPerm) {
+            android.widget.Toast.makeText(context, R.string.browser_no_screenshot_found, android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            onPermissionError()
+        }
+        return null
+    }
+    return try {
+        android.net.Uri.parse(candidate.uriString)
+    } catch (_: Exception) {
+        android.widget.Toast.makeText(context, R.string.browser_no_screenshot_found, android.widget.Toast.LENGTH_SHORT).show()
+        null
+    }
+}
+
+/** Build a share intent for the image URI with proper permission grants.
+ *  @param targetPackage Package to target, or null to leave unrestricted (for chooser). */
+private fun buildShareIntent(uri: android.net.Uri, targetPackage: String?, context: android.content.Context): android.content.Intent =
+    android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "image/*"
+        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+        clipData = android.content.ClipData.newUri(context.contentResolver, "Screenshot", uri)
+        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (targetPackage != null) setPackage(targetPackage)
+    }
+
+/** Try to start an intent. Returns true if successful. */
+private fun tryStartActivity(ime: LatinIME, intent: android.content.Intent): Boolean = try {
+    ime.startActivity(intent)
+    true
+} catch (_: Exception) {
+    false
+}
+
+/** Finds the latest screenshot and launches Google Lens via intent. */
+private fun launchLensWithLatestImage(ime: LatinIME) {
+    val context = ime.applicationContext
+    val uri = getLatestScreenshotUri(context) {
+        android.widget.Toast.makeText(context, R.string.browser_permission_needed, android.widget.Toast.LENGTH_SHORT).show()
+    } ?: return
+    val intent = buildShareIntent(uri, "com.google.ar.lens", context)
+    if (tryStartActivity(ime, intent)) return
+    // Lens not installed — fall back to share chooser
+    val chooser = buildShareIntent(uri, null /* no package filter */, context)
+    if (!tryStartActivity(ime, android.content.Intent.createChooser(chooser, context.getString(R.string.browser_lens_scan)))) {
+        android.widget.Toast.makeText(context, R.string.browser_no_lens_app, android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
+/** Finds the latest screenshot and launches Google Gemini via intent.
+ *  Tries both the main Google app and the standalone Gemini app packages. */
+private fun launchGeminiWithLatestImage(ime: LatinIME) {
+    val context = ime.applicationContext
+    val uri = getLatestScreenshotUri(context) {
+        android.widget.Toast.makeText(context, R.string.browser_permission_needed, android.widget.Toast.LENGTH_SHORT).show()
+    } ?: return
+    val packages = listOf("com.google.android.googlequicksearchbox", "com.google.android.apps.bard")
+    for (pkg in packages) {
+        if (tryStartActivity(ime, buildShareIntent(uri, pkg, context))) return
+    }
+    // None of the direct packages worked — fall back to chooser
+    val chooser = buildShareIntent(uri, null /* no package filter */, context)
+    if (!tryStartActivity(ime, android.content.Intent.createChooser(chooser, context.getString(R.string.browser_gemini_analyze)))) {
+        android.widget.Toast.makeText(context, R.string.browser_no_gemini_app, android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
 
 private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
@@ -366,6 +446,22 @@ fun BrowserContent(ime: LatinIME) {
                         text = { Text(stringResource(R.string.browser_zoom_out)) },
                         onClick = { webView.zoomOut(); browserMenuExpanded = false },
                         leadingIcon = { Icon(painterResource(R.drawable.ic_minus), contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.browser_lens_scan)) },
+                        onClick = {
+                            browserMenuExpanded = false
+                            launchLensWithLatestImage(ime)
+                        },
+                        leadingIcon = { Icon(painterResource(R.drawable.ic_lens), contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.browser_gemini_analyze)) },
+                        onClick = {
+                            browserMenuExpanded = false
+                            launchGeminiWithLatestImage(ime)
+                        },
+                        leadingIcon = { Icon(painterResource(R.drawable.ic_gemini), contentDescription = null) }
                     )
                 }
             }

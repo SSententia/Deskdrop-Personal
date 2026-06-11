@@ -12,4 +12,7 @@
     <cache-path
         name="video_temp"
         path="video_temp"/>
+    <cache-path
+        name="crop_ocr"
+        path="crop_ocr"/>
 </paths>

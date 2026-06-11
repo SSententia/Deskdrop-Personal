@@ -485,6 +485,7 @@
     <string name="ocr_no_text_found">No text found in screenshot</string>
     <string name="ocr_success">%d characters copied to clipboard</string>
     <string name="ocr_clipboard_error">Could not access clipboard</string>
+    <string name="ocr_crop_failed">Could not open crop editor</string>
     <string name="browser_url_hint">Enter URL</string>
     <string name="browser_back">Back</string>
     <string name="browser_forward">Forward</string>
@@ -498,6 +499,12 @@
     <string name="browser_no_bookmarks">No bookmarks yet</string>
     <string name="browser_zoom_in">Zoom in</string>
     <string name="browser_zoom_out">Zoom out</string>
+    <string name="browser_lens_scan">Scan with Google Lens</string>
+    <string name="browser_gemini_analyze">Analyze with Gemini</string>
+    <string name="browser_no_screenshot_found">No recent screenshot found</string>
+    <string name="browser_permission_needed">Storage permission needed to access screenshots</string>
+    <string name="browser_no_lens_app">Google Lens is not installed</string>
+    <string name="browser_no_gemini_app">Gemini is not installed</string>
     <string name="ai_slot_unconfigured">Long-press to assign a model</string>
     <!-- Title of the setting to set clipboard toolbar keys -->
     <string name="clipboard_toolbar_keys">Select clipboard toolbar keys</string>
