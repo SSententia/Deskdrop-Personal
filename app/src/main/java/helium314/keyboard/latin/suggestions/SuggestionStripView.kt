@@ -497,22 +497,43 @@ class SuggestionStripView(context: Context, attrs: AttributeSet?, defStyle: Int)
             (listener as? helium314.keyboard.latin.LatinIME)?.showFloatingNoteConfigDialog()
             return
         }
-        // OCR Screenshot: long-press opens crop UI for the latest screenshot
+        // OCR Screenshot: long-press opens in-app crop dialog for the latest screenshot
         if (tag == ToolbarKey.OCR_SCREENSHOT) {
+            android.util.Log.d(TAG, "OCR_SCREENSHOT long-press: searching for latest screenshot...")
+            
+            // Check media permissions first (same logic as OcrScreenshotHandler)
+            val hasPermission = if (android.os.Build.VERSION.SDK_INT >= 34) {
+                androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                androidx.core.content.ContextCompat.checkSelfPermission(context, "android.permission.READ_MEDIA_VISUAL_USER_SELECTED") == android.content.pm.PackageManager.PERMISSION_GRANTED
+            } else if (android.os.Build.VERSION.SDK_INT >= 33) {
+                androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            } else {
+                androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
+            if (!hasPermission) {
+                android.util.Log.w(TAG, "OCR_SCREENSHOT long-press: permission denied")
+                android.widget.Toast.makeText(context, R.string.ocr_no_permission, android.widget.Toast.LENGTH_LONG).show()
+                return
+            }
+            
             val candidate = helium314.keyboard.latin.ai.AiServiceSync.findLatestImageCandidate(context)
             if (candidate == null) {
-                android.widget.Toast.makeText(context, R.string.ocr_no_screenshot, android.widget.Toast.LENGTH_SHORT).show()
+                android.util.Log.w(TAG, "OCR_SCREENSHOT long-press: no recent screenshot found")
+                android.widget.Toast.makeText(context, R.string.ocr_no_screenshot, android.widget.Toast.LENGTH_LONG).show()
+                return
+            }
+            android.util.Log.d(TAG, "OCR_SCREENSHOT long-press: found screenshot, launching crop dialog")
+            val ime = listener as? helium314.keyboard.latin.LatinIME
+            if (ime == null) {
+                android.util.Log.w(TAG, "OCR_SCREENSHOT long-press: listener is not LatinIME, cannot show crop dialog")
+                android.widget.Toast.makeText(context, R.string.ocr_crop_failed, android.widget.Toast.LENGTH_SHORT).show()
                 return
             }
             try {
-                val intent = android.content.Intent(context, helium314.keyboard.latin.utils.CropTrampolineActivity::class.java).apply {
-                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                    putExtra(helium314.keyboard.latin.utils.CropTrampolineActivity.EXTRA_IMAGE_URI, candidate.uriString)
-                    putExtra(helium314.keyboard.latin.utils.CropTrampolineActivity.EXTRA_IMAGE_MIME, candidate.mimeType)
-                }
-                context.startActivity(intent)
+                val uri = android.net.Uri.parse(candidate.uriString)
+                helium314.keyboard.latin.utils.OcrCropDialog.show(ime, uri)
             } catch (e: Exception) {
-                android.util.Log.e(TAG, "Failed to launch crop activity", e)
+                android.util.Log.e(TAG, "Failed to show crop dialog", e)
                 android.widget.Toast.makeText(context, R.string.ocr_crop_failed, android.widget.Toast.LENGTH_SHORT).show()
             }
             return

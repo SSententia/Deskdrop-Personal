@@ -486,6 +486,9 @@
     <string name="ocr_success">%d characters copied to clipboard</string>
     <string name="ocr_clipboard_error">Could not access clipboard</string>
     <string name="ocr_crop_failed">Could not open crop editor</string>
+    <string name="ocr_crop_title">Crop Screenshot</string>
+    <string name="ocr_crop_scan">Scan</string>
+    <string name="ocr_crop_cancel">Cancel</string>
     <string name="browser_url_hint">Enter URL</string>
     <string name="browser_back">Back</string>
     <string name="browser_forward">Forward</string>
