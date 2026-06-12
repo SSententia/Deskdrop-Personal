@@ -635,7 +635,7 @@ class FloatingNoteService : Service() {
                                                                     } else if (!target.startsWith("http")) {
                                                                         target = "https://" + target
                                                                     }
-                                                                    browserWebViewRef?.loadUrl(target, java.util.Collections.singletonMap("User-Agent", desktopUA))
+                                                                    browserWebViewRef?.loadUrl(target)
                                                                 }
                                                                 true
                                                             } else false
@@ -678,21 +678,14 @@ class FloatingNoteService : Service() {
                                                             super.onPageStarted(view, url, favicon)
                                                             url?.let { browserUrlInput = it }
                                                             // Inject anti-detection JS to fix login security warnings
-                                                            val js = "(function() { var d='" + desktopUA.replace("'", "\'") + "'; Object.defineProperty(navigator,'userAgent',{get:function(){return d;},configurable:true}); Object.defineProperty(navigator,'platform',{get:function(){return 'Win32';},configurable:true}); Object.defineProperty(navigator,'vendor',{get:function(){return 'Google Inc.';},configurable:true}); if(typeof chrome==='undefined'){window.chrome={};} if(typeof chrome.webstore==='undefined'){chrome.webstore={};} })();"
+                                                            val js = "(function() { var d='" + desktopUA.replace("'", "\'") + "'; Object.defineProperty(navigator,'userAgent',{get:function(){return d;},configurable:true}); Object.defineProperty(navigator,'platform',{get:function(){return 'Win32';},configurable:true}); Object.defineProperty(navigator,'vendor',{get:function(){return 'Google Inc.';},configurable:true}); if(typeof chrome==='undefined'){window.chrome={runtime:{},loadTimes:function(){},csi:function(){}};} if(typeof chrome.webstore==='undefined'){chrome.webstore={};} if(!navigator.connection){Object.defineProperty(navigator,'connection',{get:function(){return{effectiveType:'4g',rtt:50,downlink:10,saveData:false};},configurable:true});} if(!navigator.languages||navigator.languages.length===0){Object.defineProperty(navigator,'languages',{get:function(){return['en-US','en'];},configurable:true});} if(!window.outerWidth)window.outerWidth=window.innerWidth; if(!window.outerHeight)window.outerHeight=window.innerHeight; })();"
                                                             view?.evaluateJavascript(js, null)
-                                                        }
-                                                        override fun shouldOverrideUrlLoading(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?): Boolean {
-                                                            if (request != null && view != null && request.isForMainFrame) {
-                                                                val h = java.util.HashMap<String, String>()
-                                                                request.requestHeaders?.forEach { (key, value) -> h[key] = value }
-                                                                h["User-Agent"] = desktopUA
-                                                                view.loadUrl(request.url.toString(), h)
-                                                                return true
-                                                            }
-                                                            return false
+                                                            // Inject Enter key handler for Google search box and forms with submit buttons
+                                                            val enterJs = "(function(){document.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey&&!e.ctrlKey&&!e.altKey&&!e.metaKey){var el=e.target;if(!el)return;var tag=el.tagName?el.tagName.toLowerCase():'';if(tag!=='input'&&tag!=='textarea')return;var isGoogle=el.name==='q'||el.getAttribute('aria-label')==='Search'||el.title==='Search';if(isGoogle){var sb=document.querySelector('button[aria-label*=\"Search\"],button[aria-label*=\"search\"],input[name=\"btnK\"],button.gNO89b');if(sb){e.preventDefault();sb.click();return;}}if(tag==='input'&&el.type!=='text'&&el.type!=='search'&&el.type!=='url'&&el.type!=='email')return;var form=el.closest?el.closest('form'):el.form;if(form){var btn=form.querySelector('button[type=\"submit\"],input[type=\"submit\"]');if(btn){e.preventDefault();btn.click();}}}},true);})();"
+                                                            view?.evaluateJavascript(enterJs, null)
                                                         }
                                                     }
-                                                    loadUrl(browserUrlInput, java.util.Collections.singletonMap("User-Agent", desktopUA))
+                                                    loadUrl(browserUrlInput)
                                                 }
                                             },
                                             modifier = Modifier.weight(1f).fillMaxWidth()

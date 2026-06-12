@@ -11,8 +11,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,100 +20,19 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import helium314.keyboard.latin.ai.AiServiceSync
 import helium314.keyboard.latin.utils.DeviceProtectedUtils
 import helium314.keyboard.latin.utils.showImeComposeDialog
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Shared core: finds the latest screenshot, checks permission, returns the content URI or null. */
-private fun getLatestScreenshotUri(context: android.content.Context, onPermissionError: () -> Unit): android.net.Uri? {
-    val candidate = AiServiceSync.findLatestImageCandidate(context)
-    if (candidate == null) {
-        val hasPerm = if (android.os.Build.VERSION.SDK_INT >= 34) {
-            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        } else if (android.os.Build.VERSION.SDK_INT >= 33) {
-            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        } else {
-            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        }
-        if (hasPerm) {
-            android.widget.Toast.makeText(context, R.string.browser_no_screenshot_found, android.widget.Toast.LENGTH_SHORT).show()
-        } else {
-            onPermissionError()
-        }
-        return null
-    }
-    return try {
-        android.net.Uri.parse(candidate.uriString)
-    } catch (_: Exception) {
-        android.widget.Toast.makeText(context, R.string.browser_no_screenshot_found, android.widget.Toast.LENGTH_SHORT).show()
-        null
-    }
-}
-
-/** Build a share intent for the image URI with proper permission grants.
- *  @param targetPackage Package to target, or null to leave unrestricted (for chooser). */
-private fun buildShareIntent(uri: android.net.Uri, targetPackage: String?, context: android.content.Context): android.content.Intent =
-    android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-        type = "image/*"
-        putExtra(android.content.Intent.EXTRA_STREAM, uri)
-        clipData = android.content.ClipData.newUri(context.contentResolver, "Screenshot", uri)
-        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (targetPackage != null) setPackage(targetPackage)
-    }
-
-/** Try to start an intent. Returns true if successful. */
-private fun tryStartActivity(ime: LatinIME, intent: android.content.Intent): Boolean = try {
-    ime.startActivity(intent)
-    true
-} catch (_: Exception) {
-    false
-}
-
-/** Finds the latest screenshot and launches Google Lens via intent. */
-private fun launchLensWithLatestImage(ime: LatinIME) {
-    val context = ime.applicationContext
-    val uri = getLatestScreenshotUri(context) {
-        android.widget.Toast.makeText(context, R.string.browser_permission_needed, android.widget.Toast.LENGTH_SHORT).show()
-    } ?: return
-    val intent = buildShareIntent(uri, "com.google.ar.lens", context)
-    if (tryStartActivity(ime, intent)) return
-    // Lens not installed — fall back to share chooser
-    val chooser = buildShareIntent(uri, null /* no package filter */, context)
-    if (!tryStartActivity(ime, android.content.Intent.createChooser(chooser, context.getString(R.string.browser_lens_scan)))) {
-        android.widget.Toast.makeText(context, R.string.browser_no_lens_app, android.widget.Toast.LENGTH_SHORT).show()
-    }
-}
-
-/** Finds the latest screenshot and launches Google Gemini via intent.
- *  Tries both the main Google app and the standalone Gemini app packages. */
-private fun launchGeminiWithLatestImage(ime: LatinIME) {
-    val context = ime.applicationContext
-    val uri = getLatestScreenshotUri(context) {
-        android.widget.Toast.makeText(context, R.string.browser_permission_needed, android.widget.Toast.LENGTH_SHORT).show()
-    } ?: return
-    val packages = listOf("com.google.android.googlequicksearchbox", "com.google.android.apps.bard")
-    for (pkg in packages) {
-        if (tryStartActivity(ime, buildShareIntent(uri, pkg, context))) return
-    }
-    // None of the direct packages worked — fall back to chooser
-    val chooser = buildShareIntent(uri, null /* no package filter */, context)
-    if (!tryStartActivity(ime, android.content.Intent.createChooser(chooser, context.getString(R.string.browser_gemini_analyze)))) {
-        android.widget.Toast.makeText(context, R.string.browser_no_gemini_app, android.widget.Toast.LENGTH_SHORT).show()
-    }
-}
-
 private const val DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
-// JavaScript to inject on page load to fix login security warnings
-// Overrides navigator properties that websites use to detect WebView
+// JavaScript to inject on page load to fix login security warnings and SPA compatibility.
+// Overrides navigator properties that websites use to detect WebView.
 private val ANTI_DETECTION_JS = """
 (function() {
     var d = "$DESKTOP_USER_AGENT";
@@ -132,11 +49,75 @@ private val ANTI_DETECTION_JS = """
         configurable: true
     });
     if (typeof window.chrome === 'undefined') {
-        window.chrome = {};
+        window.chrome = { runtime: {}, loadTimes: function(){}, csi: function(){} };
     }
     if (typeof window.chrome.webstore === 'undefined') {
         window.chrome.webstore = {};
     }
+    // Fix navigator.connection for sites that check network info
+    if (!navigator.connection) {
+        Object.defineProperty(navigator, 'connection', {
+            get: function() { return { effectiveType: '4g', rtt: 50, downlink: 10, saveData: false }; },
+            configurable: true
+        });
+    }
+    // Fix navigator.languages
+    if (!navigator.languages || navigator.languages.length === 0) {
+        Object.defineProperty(navigator, 'languages', {
+            get: function() { return ['en-US', 'en']; },
+            configurable: true
+        });
+    }
+    // Fix permissions API query for notifications (Google login checks this)
+    if (typeof navigator.permissions !== 'undefined') {
+        var origQuery = navigator.permissions.query;
+        navigator.permissions.query = function(desc) {
+            if (desc && desc.name === 'notifications') {
+                var perm = (typeof Notification !== 'undefined' && Notification.permission) ? Notification.permission : 'default';
+                return Promise.resolve({ state: perm, onchange: null });
+            }
+            return origQuery.call(navigator.permissions, desc);
+        };
+    }
+    // Fix missing WebGL context that some SPAs check
+    if (!window.WebGLRenderingContext) {
+        window.WebGLRenderingContext = function(){};
+    }
+    // Ensure window.outerWidth/Height are set (some sites check these)
+    if (!window.outerWidth) window.outerWidth = window.innerWidth;
+    if (!window.outerHeight) window.outerHeight = window.innerHeight;
+    // Fix screen.availWidth/Height
+    if (!screen.availWidth) screen.availWidth = screen.width;
+    if (!screen.availHeight) screen.availHeight = screen.height;
+})();
+""".trimIndent()
+
+// JavaScript to handle Enter key in search engines and forms.
+// Only intercepts Enter for Google search box (input[name="q"]) and generic forms
+// with explicit submit buttons, to avoid breaking chat inputs, textareas, etc.
+private val ENTER_KEY_JS = """
+(function() {
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+            var el = e.target;
+            if (!el) return;
+            var tag = el.tagName ? el.tagName.toLowerCase() : '';
+            if (tag !== 'input' && tag !== 'textarea') return;
+            // Google search: click the search button when in the search box
+            var isGoogleSearch = el.name === 'q' || el.getAttribute('aria-label') === 'Search' || el.title === 'Search';
+            if (isGoogleSearch) {
+                var searchBtn = document.querySelector('button[aria-label*="Search"], button[aria-label*="search"], input[name="btnK"], button.gNO89b');
+                if (searchBtn) { e.preventDefault(); searchBtn.click(); return; }
+            }
+            // For other inputs inside a form with an explicit submit button, submit the form
+            if (tag === 'input' && el.type !== 'text' && el.type !== 'search' && el.type !== 'url' && el.type !== 'email') return;
+            var form = el.closest ? el.closest('form') : el.form;
+            if (form) {
+                var submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+                if (submitBtn) { e.preventDefault(); submitBtn.click(); return; }
+            }
+        }
+    }, true);
 })();
 """.trimIndent()
 
@@ -222,19 +203,9 @@ object BrowserSession {
                         url?.let { lastUrl = it }
                         view?.evaluateJavascript(ANTI_DETECTION_JS, null)
                     }
-                    override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
-                        if (request != null && view != null && request.isForMainFrame) {
-                            val headers = mutableMapOf<String, String>()
-                            request.requestHeaders?.forEach { (key, value) -> headers[key] = value }
-                            headers["User-Agent"] = DESKTOP_USER_AGENT
-                            view.loadUrl(request.url.toString(), headers)
-                            return true
-                        }
-                        return false
-                    }
                 }
             }
-            webView?.loadUrl(lastUrl, mapOf("User-Agent" to DESKTOP_USER_AGENT))
+            webView?.loadUrl(lastUrl)
         }
         return webView!!
     }
@@ -277,11 +248,11 @@ fun BrowserContent(ime: LatinIME) {
         var target = urlInput.trim()
         if (target.isEmpty()) return
         if (!target.contains(".") && !target.startsWith("http")) {
-            target = "https://www.google.com/search?q=$target"
+            target = "https://www.google.com/search?q=" + android.net.Uri.encode(target)
         } else if (!target.startsWith("http")) {
             target = "https://$target"
         }
-        webView.loadUrl(target, mapOf("User-Agent" to DESKTOP_USER_AGENT))
+        webView.loadUrl(target)
     }
 
     // Initialize settings for zoom support
@@ -301,6 +272,7 @@ fun BrowserContent(ime: LatinIME) {
                 }
                 pageTitle = view?.title ?: url ?: ""
                 view?.evaluateJavascript(ANTI_DETECTION_JS, null)
+                view?.evaluateJavascript(ENTER_KEY_JS, null)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -308,17 +280,6 @@ fun BrowserContent(ime: LatinIME) {
                 canGoBack = webView.canGoBack()
                 canGoForward = webView.canGoForward()
                 pageTitle = view?.title ?: url ?: ""
-            }
-
-            override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
-                if (request != null && view != null && request.isForMainFrame) {
-                    val headers = mutableMapOf<String, String>()
-                    request.requestHeaders?.forEach { (key, value) -> headers[key] = value }
-                    headers["User-Agent"] = DESKTOP_USER_AGENT
-                    view.loadUrl(request.url.toString(), headers)
-                    return true
-                }
-                return false
             }
         }
     }
@@ -362,7 +323,8 @@ fun BrowserContent(ime: LatinIME) {
                             android.view.ViewGroup.LayoutParams.WRAP_CONTENT
                         )
                         setOnEditorActionListener { _, actionId, _ ->
-                            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_GO) {
+                            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_GO ||
+                                actionId == android.view.inputmethod.EditorInfo.IME_NULL) {
                                 urlInput = text.toString()
                                 navigate()
                                 true
@@ -451,7 +413,8 @@ fun BrowserContent(ime: LatinIME) {
                         text = { Text(stringResource(R.string.browser_lens_scan)) },
                         onClick = {
                             browserMenuExpanded = false
-                            launchLensWithLatestImage(ime)
+                            // Navigate to Google Lens web interface in the WebView
+                            webView.loadUrl("https://lens.google.com/")
                         },
                         leadingIcon = { Icon(painterResource(R.drawable.ic_lens), contentDescription = null) }
                     )
@@ -459,7 +422,8 @@ fun BrowserContent(ime: LatinIME) {
                         text = { Text(stringResource(R.string.browser_gemini_analyze)) },
                         onClick = {
                             browserMenuExpanded = false
-                            launchGeminiWithLatestImage(ime)
+                            // Navigate to Gemini web interface in the WebView
+                            webView.loadUrl("https://gemini.google.com/app")
                         },
                         leadingIcon = { Icon(painterResource(R.drawable.ic_gemini), contentDescription = null) }
                     )
@@ -480,7 +444,7 @@ fun BrowserContent(ime: LatinIME) {
                 bookmarks = bookmarks,
                 currentUrl = urlInput,
                 onLoadUrl = { url ->
-                    webView.loadUrl(url, mapOf("User-Agent" to DESKTOP_USER_AGENT))
+                    webView.loadUrl(url)
                     showBookmarks = false
                 },
                 onDelete = { url ->
