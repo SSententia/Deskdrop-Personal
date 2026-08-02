@@ -72,6 +72,10 @@ class FloatingNoteService : Service() {
 
         // Callback for image attachment from NoteImagePickerActivity
         var imageAttachCallback: ((String) -> Unit)? = null
+
+        /** Active EditText reference for the floating keyboard to type into. */
+        @Volatile
+        var activeNoteEditText: java.lang.ref.WeakReference<android.widget.EditText>? = null
     }
 
     private var wm: WindowManager? = null
@@ -262,7 +266,10 @@ class FloatingNoteService : Service() {
                         showImageLabelDialog = true
                         imageLabelText = ""
                     }
-                    onDispose { imageAttachCallback = null }
+                    onDispose {
+                        imageAttachCallback = null
+                        activeNoteEditText = null
+                    }
                 }
 
                 // Camouflage: only clear when user starts editing.
@@ -433,7 +440,23 @@ class FloatingNoteService : Service() {
                                     Box(
                                         modifier = Modifier
                                             .size(24.dp)
-                                            .clickable { showFallbackKeyboard = !showFallbackKeyboard }
+                                            .clickable {
+                                                if (showFallbackKeyboard) {
+                                                    // Stop the keyboard service
+                                                    stopService(Intent(this@FloatingNoteService, FloatingKeyboardService::class.java))
+                                                    showFallbackKeyboard = false
+                                                } else {
+                                                    // Launch keyboard service positioned near the note
+                                                    val kbdIntent = Intent(this@FloatingNoteService, FloatingKeyboardService::class.java).apply {
+                                                        putExtra("x", params.x)
+                                                        putExtra("y", params.y)
+                                                        putExtra("noteWidth", widthDp)
+                                                        putExtra("noteHeight", heightDp)
+                                                    }
+                                                    startService(kbdIntent)
+                                                    showFallbackKeyboard = true
+                                                }
+                                            }
                                             .background(
                                                 if (showFallbackKeyboard) Color(0xFFFF9800) else Color(0xFF666666),
                                                 CircleShape
@@ -697,6 +720,7 @@ class FloatingNoteService : Service() {
                                         factory = { ctx ->
                                             EditText(ctx).apply {
                                                 editTextRef = this
+                                                activeNoteEditText = java.lang.ref.WeakReference(this)
                                                 setText(initialText)
                                                 setHint("Tap to note...")
                                                 setHintTextColor(android.graphics.Color.argb(136, 255, 255, 255))
@@ -813,6 +837,7 @@ class FloatingNoteService : Service() {
                                                         val ime = LatinIME.getInstance()
                                                         ime?.setDialogEditText(null)
                                                         ime?.requestHideSelf(0)
+                                                        stopService(Intent(this@FloatingNoteService, FloatingKeyboardService::class.java))
                                                         removeFloatingNote()
                                                         stopSelf()
                                                     }
@@ -1121,119 +1146,6 @@ class FloatingNoteService : Service() {
                             }
                         }
 
-                        // Floating Keyboard fallback
-                        if (showFallbackKeyboard && !isBrowserMode) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .fillMaxWidth()
-                            ) {
-                                val kbRows = listOf("QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM")
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(Color(0xE62A2A2A))
-                                        .padding(4.dp)
-                                ) {
-                                    kbRows.forEach { row ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.Center
-                                        ) {
-                                            row.forEach { char ->
-                                                Box(
-                                                    modifier = Modifier
-                                                        .padding(2.dp)
-                                                        .defaultMinSize(minWidth = 30.dp)
-                                                        .height(36.dp)
-                                                        .background(Color(0xFF444444), RoundedCornerShape(4.dp))
-                                                        .clickable {
-                                                            editTextRef?.let { et ->
-                                                                val start = et.selectionStart.coerceAtLeast(0)
-                                                                et.text.insert(start, char.toString())
-                                                            }
-                                                        },
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Text(
-                                                        text = char.toString(),
-                                                        color = Color.White,
-                                                        fontSize = 14.sp,
-                                                        modifier = Modifier.padding(horizontal = 6.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                    // Bottom row: dismiss, space, backspace, enter
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .padding(2.dp)
-                                                .width(44.dp)
-                                                .height(36.dp)
-                                                .background(Color(0xFF666666), RoundedCornerShape(4.dp))
-                                                .clickable { showFallbackKeyboard = false },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("\u2328", color = Color.White, fontSize = 14.sp)
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .padding(2.dp)
-                                                .weight(1f)
-                                                .height(36.dp)
-                                                .background(Color(0xFF444444), RoundedCornerShape(4.dp))
-                                                .clickable {
-                                                    editTextRef?.let { et ->
-                                                        val start = et.selectionStart.coerceAtLeast(0)
-                                                        et.text.insert(start, " ")
-                                                    }
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("Space", color = Color.White, fontSize = 12.sp)
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .padding(2.dp)
-                                                .width(44.dp)
-                                                .height(36.dp)
-                                                .background(Color(0xFF555555), RoundedCornerShape(4.dp))
-                                                .clickable {
-                                                    editTextRef?.let { et ->
-                                                        val start = et.selectionStart
-                                                        if (start > 0) et.text.delete(start - 1, start)
-                                                    }
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("\u232B", color = Color.White, fontSize = 16.sp)
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .padding(2.dp)
-                                                .width(44.dp)
-                                                .height(36.dp)
-                                                .background(Color(0xFF4CAF50), RoundedCornerShape(4.dp))
-                                                .clickable {
-                                                    editTextRef?.let { et ->
-                                                        val start = et.selectionStart.coerceAtLeast(0)
-                                                        et.text.insert(start, "\n")
-                                                    }
-                                                },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("\u23CE", color = Color.White, fontSize = 16.sp)
-                                        }
-                                    }
-                                }
-                            }
-                        }
                     } // Box closes
                 } // Card closes
             } // setContent closes
@@ -1312,6 +1224,10 @@ class FloatingNoteService : Service() {
     private fun removeFloatingNote() {
         val cleanup = Runnable {
             stopHeartbeat()
+            // Also stop the floating keyboard service if running
+            stopService(Intent(this@FloatingNoteService, FloatingKeyboardService::class.java))
+            // Clear static EditText reference to avoid memory leak
+            activeNoteEditText = null
             try {
                 composeView?.let {
                     try { wm?.removeView(it) } catch (_: Exception) {}

@@ -232,6 +232,15 @@ SPDX-License-Identifier: Apache-2.0 AND GPL-3.0-only
                       android:value="Persistent floating note widget on top of apps" />
         </service>
 
+        <!-- Persistent floating keyboard service -->
+        <service
+            android:name="helium314.keyboard.latin.ai.FloatingKeyboardService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                      android:value="Persistent floating keyboard overlay for typing into the floating note" />
+        </service>
+
         <!-- Quick Settings tile for voice recording -->
         <service
             android:name="helium314.keyboard.latin.ai.VoiceTileService"
